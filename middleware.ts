@@ -10,6 +10,7 @@ const isPublicRoute = createRouteMatcher([
   '/portal/(.*)',
   '/sign-up',
   '/sign-in',
+  '/import/(.*)',
   '/terms',
   '/api/(.*)',
   '/api/webhooks(.*)'
@@ -25,6 +26,7 @@ const allowedRoutes = [
   '/api/sources',
   '/api/import',
   '/import/(.*)',
+  '/import/lDF3tpEADq',
   '/sources',
   '/sign-in',
   '/sign-up',
@@ -37,7 +39,7 @@ const allowedRoutes = [
 
 const allowedOrigins = [
   'http://localhost:3000',
-  'https://d064-2600-1700-3aa5-b800-98a6-4138-3929-e84f.ngrok-free.app',
+  'https://7400-2600-1700-3aa5-b800-e4c8-961a-e731-bd60.ngrok-free.app'
 ];
 
 function corsMiddleware(request: NextRequest, response: NextResponse) {

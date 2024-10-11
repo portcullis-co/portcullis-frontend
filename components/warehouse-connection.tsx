@@ -13,6 +13,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { createClient } from '@/lib/supabase/client'
 import { Database } from 'lucide-react'  // or your preferred icon library
 import Image from 'next/image';
+import { link } from 'fs'
 
 interface Warehouse {
   id: string
@@ -21,11 +22,30 @@ interface Warehouse {
   connected: boolean
 }
 
+interface Credentials {
+  username: string;
+  password: string;
+  host: string;
+  database: string;
+  warehouse: string;
+  projectId: string;
+  keyFilename: string;
+  path: string;
+}
+
+interface WarehouseConnectionProps {
+  token?: string;
+  onClose?: () => void;  // Add this line
+}
+
 interface LinkDetails {
   type: string;
-  import_id: string;
   logo: string;
   redirect_url: string;
+  source: string;
+  organization: string;
+  export_id: string;
+  import_id: string;
 }
 
 interface Destination {
@@ -54,7 +74,8 @@ const Circle = React.forwardRef<
 
 Circle.displayName = "Circle";
 
-export default function WarehouseConnectionComponent({ token }: { token: string }) {
+export default function WarehouseConnection({ token, onClose }: WarehouseConnectionProps) {
+  console.log('WarehouseConnection received token:', token);
   const [isClient, setIsClient] = useState(false)
   const [step, setStep] = useState(0)
   const [warehouses, setWarehouses] = useState<Warehouse[]>([])
@@ -63,6 +84,9 @@ export default function WarehouseConnectionComponent({ token }: { token: string 
   const [selectedWarehouse, setSelectedWarehouse] = useState<Warehouse | null>(null);
   const [selectedDestination, setSelectedDestination] = useState<Destination | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
   const [credentials, setCredentials] = useState({
     username: '',
     password: '',
@@ -80,11 +104,71 @@ export default function WarehouseConnectionComponent({ token }: { token: string 
   const appLogoRef = useRef<HTMLDivElement>(null)
   const destLogoRef = useRef<HTMLDivElement>(null)
 
+  const runPipeline = async (organization: string, destination: string, datasetName: string) => {
+    const supabase = createClient();
+    const source = linkDetails?.source;
+
+    const { data, error } = await supabase
+      .from('imports')
+      .insert({
+        organization: linkDetails?.organization,
+        source: source,
+        credentials: credentials,
+        dataset_name: datasetName
+      })
+
+    const { data: credentialsData, error: credentialsError } = await supabase
+      .from('sources')
+      .select('*')
+      .eq('id', source)
+      .maybeSingle();
+  
+    if (error) {
+      console.error('Error fetching credentials:', error);
+      throw new Error('Failed to fetch credentials');
+    }
+  
+    const requestBody = {
+      organization: linkDetails?.organization,
+      source: source,
+      type: linkDetails?.type,
+      export_id: linkDetails?.export_id,
+      import_id: linkDetails?.import_id,
+      dataset_name: `${linkDetails?.organization}-${linkDetails?.source}-dataset`,
+      link_credentials: credentials,
+      source_credentials: credentialsData?.credentials,
+      destination: destination
+    };
+  
+    console.log('Sending request to pipeline API:', requestBody);
+  
+    const response = await fetch('http://localhost:8000/api/pipeline', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+    });
+  
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Pipeline API error:', errorText);
+      throw new Error(`Pipeline API failed with status ${response.status}`);
+    }
+  
+    const result = await response.json();
+    return {
+      status: response.status,
+      data: result
+    };
+  };
+
   const fetchLinkDetails = async (token: string): Promise<LinkDetails | null> => {
+    console.log('fetchLinkDetails called with token:', token);
     const supabase = createClient();
     const { data, error } = await supabase
       .from('links')
-      .select('type, import_id, logo, redirect_url')
+      .select('type, import_id, logo, export_id, redirect_url, organization, source')
       .eq('invite_token', token)
       .single();
   
@@ -93,15 +177,29 @@ export default function WarehouseConnectionComponent({ token }: { token: string 
       return null;
     }
   
-    return {
-      type: data.type,
+    console.log('Raw data from supabase:', data);
+  
+    if (!data) {
+      console.error('No data returned from supabase');
+      return null;
+    }
+  
+    const details: LinkDetails = {
+      type: data.type ?? '',
       import_id: data.import_id,
+      source: data.source,
+      organization: data.organization,
+      export_id: data.export_id,
       logo: data.logo,
       redirect_url: data.redirect_url,
     };
+  
+    console.log('Returning link details:', details);
+    return details;
   };
 
   useEffect(() => {
+    console.log('useEffect triggered. Token:', token);
     setIsClient(true)
     setWarehouses([
       { id: '1', name: 'Clickhouse', logo: 'https://cdn.brandfetch.io/idnezyZEJm/w/400/h/400/theme/dark/icon.jpeg?k=bfHSJFAPEG', connected: false },
@@ -111,110 +209,105 @@ export default function WarehouseConnectionComponent({ token }: { token: string 
       { id: '5', name: 'Postgres', logo: '/placeholder.svg?height=40&width=40&text=PG', connected: false },
     ])
     const getLinkDetails = async () => {
-      const details = await fetchLinkDetails(token);
-      if (details) {
-        setLinkDetails(details);
-      }
-    }
-    getLinkDetails();
-  }, [token])  // Add token as a dependency
-  
-
-  const filteredWarehouses = warehouses.filter(wh => 
-    wh.name.toLowerCase().includes(searchTerm.toLowerCase())
-  )
-
-
-
-  const handleContinue = async () => {
-    if (step < 3) {
-      setStep(step + 1);
-    } else {
-      // Prepare the warehouse configuration based on the selected warehouse type
-      let warehouseConfig: any = {
-        type: selectedWarehouse?.name.toLowerCase(),
-      };
-      
-      switch(selectedWarehouse?.name.toLowerCase()) {
-        case 'clickhouse':
-          warehouseConfig = {
-            ...warehouseConfig,
-            url: credentials.host, // Use 'url' instead of 'host'
-            database: credentials.database,
-            username: credentials.username,
-            password: credentials.password
-          };
-          break;
-        case 'snowflake':
-          warehouseConfig = {
-            ...warehouseConfig,
-            account: credentials.host,
-            username: credentials.username,
-            password: credentials.password,
-            database: credentials.database,
-            warehouse: credentials.warehouse
-          };
-          break;
-        case 'bigquery':
-          warehouseConfig = {
-            ...warehouseConfig,
-            projectId: credentials.projectId,
-            keyFilename: credentials.keyFilename
-          };
-          break;
-        case 'databricks':
-          warehouseConfig = {
-            ...warehouseConfig,
-            host: credentials.host,
-            token: credentials.password,
-            path: credentials.path
-          };
-          break;
-        case 'postgres':
-          warehouseConfig = {
-            ...warehouseConfig,
-            host: credentials.host,
-            port: 5432,
-            database: credentials.database,
-            user: credentials.username,
-            password: credentials.password
-          };
-          break;
-        default:
-          console.error('Unsupported warehouse type');
-          return;
-      }
-  
-      // Submit credentials to the API
-      const response = await fetch('/api/import', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          sourceCredentials: warehouseConfig,
-          importCredentials: {
-            type: 'destination',
-            // Add any necessary destination credentials here
-          },
-          etlJob: {
-            query: "SELECT * FROM your_table", // Replace with actual query
-            destination: "your_destination_table", // Replace with actual destination
-          },
-        }),
-      });
-  
-      if (response.ok) {
-        const result = await response.json();
-        console.log('Import setup result:', result);
-        setStep(4); // Move to success step
+      console.log('getLinkDetails called. Token:', token);
+      if (token) {
+        try {
+          console.log('Fetching link details...');
+          const details = await fetchLinkDetails(token);
+          console.log('Fetched details:', details);
+          if (details) {
+            setLinkDetails(details);
+            console.log('Link details set:', details);
+          } else {
+            console.error('fetchLinkDetails returned null');
+            setError('Failed to fetch link details. Please try again.');
+          }
+        } catch (error) {
+          console.error('Error in fetchLinkDetails:', error);
+          setError('An error occurred while fetching link details. Please try again.');
+        }
       } else {
-        const errorData = await response.json();
-        console.error('Failed to set up import:', errorData);
-        // Handle error (e.g., show error message to user)
+        console.error('No token provided');
+        setError('No token provided. Unable to fetch link details.');
       }
+    };
+    getLinkDetails();
+  }, [token]);
+  
+  const filteredWarehouses = warehouses.filter((wh) => 
+    wh.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+const handleContinue = async () => {
+  console.log('handleContinue called, current step:', step);
+  console.log('Current linkDetails:', linkDetails);
+  
+  if (step < 2) {
+    setStep(step + 1);
+  } else if (step === 2) {
+    if (!linkDetails) {
+      console.error('Link details are missing. Cannot proceed.');
+      setError('Link details are missing. Please try again.');
+      return;
     }
-  };
+    
+    console.log('Attempting to connect with credentials:', credentials);
+    setIsLoading(true);
+    setError(null);
+    try {
+      if (!selectedWarehouse || !selectedWarehouse.name) {
+        throw new Error('No warehouse selected. Please select a warehouse and try again.');
+      }
+
+      // Validate credentials
+      const requiredFields = ['username', 'password', 'host', 'database'] as const;
+      const missingFields = requiredFields.filter(field => !credentials[field]);
+      if (missingFields.length > 0) {
+        throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
+      }
+
+      // Prepare the warehouse configuration
+      let warehouseConfig: any = {
+        type: selectedWarehouse.name.toLowerCase(),
+        ...credentials
+      };
+
+      console.log('Warehouse config:', warehouseConfig);
+
+      // Run the pipeline
+      console.log('Running pipeline with:', {
+        organization: linkDetails.organization,
+        destination: selectedWarehouse.name,
+        datasetName: `${linkDetails.organization}-${linkDetails.type}-dataset`
+      });
+
+      const result = await runPipeline(
+        linkDetails.organization,
+        selectedWarehouse.name,
+        `${linkDetails.organization}-${linkDetails.type}-dataset`
+      );
+      console.log('Pipeline execution result:', result);
+      
+      if (result.status === 200) {
+        setSuccess(true);
+        setStep(3); // Move to success step
+      } else {
+        throw new Error(`Pipeline execution failed with status ${result.status}`);
+      }
+    } catch (error: unknown) {
+      console.error('Failed to set up import:', error);
+      if (error instanceof Error) {
+        setError(error.message || 'Failed to set up import. Please try again.');
+      } else {
+        setError('An unexpected error occurred. Please try again.');
+      }
+      // Log the full error object
+      console.error('Full error object:', JSON.stringify(error, null, 2));
+    } finally {
+      setIsLoading(false);
+    }
+  }
+};
 
   const handleOAuthAuthorization = () => {
     if (selectedDestination && selectedDestination.oauthUrl) {
@@ -340,74 +433,62 @@ export default function WarehouseConnectionComponent({ token }: { token: string 
               </CardContent>
             </Card>
           )
-        case 2:
-          return (
-            <div className="p-6">
-              <h3 className="text-lg font-medium mb-4">Enter your credentials</h3>
-              <form onSubmit={(e) => { e.preventDefault(); handleContinue(); }} className="space-y-4">
-                <Input 
-                  placeholder="Username or Account Name" 
-                  value={credentials.username}
-                  onChange={(e) => setCredentials({...credentials, username: e.target.value})}
-                />
-                <Input 
-                  type="password" 
-                  placeholder="Password or Access Token"
-                  value={credentials.password}
-                  onChange={(e) => setCredentials({...credentials, password: e.target.value})}
-                />
-                <Input 
-                  placeholder="Host or Region"
-                  value={credentials.host}
-                  onChange={(e) => setCredentials({...credentials, host: e.target.value})}
-                />
-                <Input 
-                  placeholder="Database Name"
-                  value={credentials.database}
-                  onChange={(e) => setCredentials({...credentials, database: e.target.value})}
-                />
-                <Button type="submit" className="w-full">Connect</Button>
-              </form>
-            </div>
-          )
+          case 2:
+            return (
+              <div className="p-6">
+                <h3 className="text-lg font-medium mb-4">Enter your credentials</h3>
+                <div className="space-y-4">
+                  <Input 
+                    placeholder="Username or Account Name" 
+                    value={credentials.username}
+                    onChange={(e) => setCredentials({...credentials, username: e.target.value})}
+                  />
+                  <Input 
+                    type="password" 
+                    placeholder="Password or Access Token"
+                    value={credentials.password}
+                    onChange={(e) => setCredentials({...credentials, password: e.target.value})}
+                  />
+                  <Input 
+                    placeholder="Host or Region"
+                    value={credentials.host}
+                    onChange={(e) => setCredentials({...credentials, host: e.target.value})}
+                  />
+                  <Input 
+                    placeholder="Database Name"
+                    value={credentials.database}
+                    onChange={(e) => setCredentials({...credentials, database: e.target.value})}
+                  />
+                  <Button onClick={handleContinue} className="w-full">
+                    {isLoading ? 'Connecting...' : 'Connect'}
+                  </Button>
+                </div>
+              </div>
+            )
+
   
-        case 3:
-          return (
-            <div className="p-6">
-              <h3 className="text-lg font-medium mb-4">Configure ETL Job</h3>
-              <form onSubmit={(e) => { e.preventDefault(); handleContinue(); }} className="space-y-4">
-                <Select>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select ETL frequency" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="hourly">Hourly</SelectItem>
-                    <SelectItem value="daily">Daily</SelectItem>
-                    <SelectItem value="weekly">Weekly</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Button type="submit" className="w-full">Set Up ETL Job</Button>
-              </form>
-            </div>
-          )
-  
-          case 4:
+          case 3:
             return (
               <div className="p-6 text-center">
-                <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
-                <h2 className="text-2xl font-bold mb-4">Success!</h2>
-                <p className="mb-6">Your {selectedWarehouse?.name} has been connected and the ETL job has been set up.</p>
-                <Button onClick={() => {
-                  if (linkDetails?.redirect_url) {
-                    window.location.href = linkDetails.redirect_url;
-                  } else {
-                    setStep(0);
-                  }
-                }} className="w-full">
-                  Finish
-                </Button>
+                {isLoading ? (
+                  <p>Setting up your connection...</p>
+                ) : error ? (
+                  <div>
+                    <p className="text-red-500">{error}</p>
+                    <Button onClick={() => setStep(3)} className="mt-4">Try Again</Button>
+                  </div>
+                ) : (
+                  <>
+                    <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
+                    <h2 className="text-2xl font-bold mb-4">Success!</h2>
+                    <p className="mb-6">Your {selectedWarehouse?.name} has been connected and the ETL job has been set up.</p>
+                    <Button onClick={onClose || (() => console.log('Connection completed'))} className="w-full">
+                      Finish
+                    </Button>
+                  </>
+                )}
               </div>
-          )
+            )
       }
     }
 

@@ -27,6 +27,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
     const supabase = createClient();
     const { userId, orgId } = auth();
+    const slug = auth().orgSlug;
     
     if (!userId || !orgId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -47,7 +48,7 @@ export async function POST(request: Request) {
   
       const { data, error } = await supabase
         .from('sources')
-        .insert({ type, credentials, organization: orgId })
+        .insert({ type, credentials, organization: orgId, slug  })
         .select()
         .single();
   
