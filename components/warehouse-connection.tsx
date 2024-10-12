@@ -89,6 +89,7 @@ export default function WarehouseConnection({ token, onClose }: WarehouseConnect
   const [success, setSuccess] = useState(false);
   const [credentials, setCredentials] = useState({
     username: '',
+    user: '',
     password: '',
     host: '',
     database: '',
@@ -107,42 +108,57 @@ export default function WarehouseConnection({ token, onClose }: WarehouseConnect
   const runPipeline = async (organization: string, destination: string, datasetName: string) => {
     const supabase = createClient();
     const source = linkDetails?.source;
-
-    const { data, error } = await supabase
-      .from('imports')
-      .insert({
-        organization: linkDetails?.organization,
-        source: source,
-        credentials: credentials,
-        dataset_name: datasetName
-      })
+  
+    if (!source) {
+      console.error('Source is undefined');
+      throw new Error('Source is undefined. Cannot fetch credentials.');
+    }
+  
+    console.log('Source value:', source);
+  
+    console.log('Fetching credentials for source:', source);
+    console.log('Querying for source ID:', source);
 
     const { data: credentialsData, error: credentialsError } = await supabase
       .from('sources')
       .select('*')
       .eq('id', source)
       .maybeSingle();
+
+    console.log('Query result:', { data: credentialsData, error: credentialsError });
   
-    if (error) {
-      console.error('Error fetching credentials:', error);
-      throw new Error('Failed to fetch credentials');
+    if (credentialsError) {
+      console.error('Error fetching source:', credentialsError);
+      throw new Error(`Failed to fetch source: ${credentialsError.message}`);
+    }
+  
+    if (!credentialsData) {
+      console.error('No data found for source ID:', source);
+      throw new Error(`No data found for source ID: ${source}`);
+    }
+  
+    if (!credentialsData.credentials) {
+      console.error('Credentials are missing in the source data');
+      throw new Error('Credentials are missing in the source data');
     }
   
     const requestBody = {
       organization: linkDetails?.organization,
       source: source,
       type: linkDetails?.type,
+      import_warehouse: selectedWarehouse?.name,
+      source_warehouse: credentialsData?.type ? credentialsData.type.charAt(0).toUpperCase() + credentialsData.type.slice(1) : undefined,
       export_id: linkDetails?.export_id,
       import_id: linkDetails?.import_id,
-      dataset_name: `${linkDetails?.organization}-${linkDetails?.source}-dataset`,
+      dataset_name: datasetName,
       link_credentials: credentials,
-      source_credentials: credentialsData?.credentials,
+      source_credentials: credentialsData.credentials,
       destination: destination
     };
   
-    console.log('Sending request to pipeline API:', requestBody);
+    console.log('Sending request to pipeline API:', JSON.stringify(requestBody, null, 2));
   
-    const response = await fetch('http://localhost:8000/api/pipeline', {
+    const response = await fetch('http://localhost:8000/pipeline', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -153,7 +169,7 @@ export default function WarehouseConnection({ token, onClose }: WarehouseConnect
     if (!response.ok) {
       const errorText = await response.text();
       console.error('Pipeline API error:', errorText);
-      throw new Error(`Pipeline API failed with status ${response.status}`);
+      throw new Error(`Pipeline API failed with status ${response.status}: ${errorText}`);
     }
   
     const result = await response.json();
@@ -238,76 +254,68 @@ export default function WarehouseConnection({ token, onClose }: WarehouseConnect
     wh.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-const handleContinue = async () => {
-  console.log('handleContinue called, current step:', step);
-  console.log('Current linkDetails:', linkDetails);
-  
-  if (step < 2) {
-    setStep(step + 1);
-  } else if (step === 2) {
-    if (!linkDetails) {
-      console.error('Link details are missing. Cannot proceed.');
-      setError('Link details are missing. Please try again.');
-      return;
-    }
+  const handleContinue = async () => {
+    console.log('handleContinue called, current step:', step);
+    console.log('Current linkDetails:', linkDetails);
     
-    console.log('Attempting to connect with credentials:', credentials);
-    setIsLoading(true);
-    setError(null);
-    try {
-      if (!selectedWarehouse || !selectedWarehouse.name) {
-        throw new Error('No warehouse selected. Please select a warehouse and try again.');
+    if (step < 2) {
+      setStep(step + 1);
+    } else if (step === 2) {
+      if (!linkDetails) {
+        console.error('Link details are missing. Cannot proceed.');
+        setError('Link details are missing. Please try again.');
+        return;
       }
-
-      // Validate credentials
-      const requiredFields = ['username', 'password', 'host', 'database'] as const;
-      const missingFields = requiredFields.filter(field => !credentials[field]);
-      if (missingFields.length > 0) {
-        throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
-      }
-
-      // Prepare the warehouse configuration
-      let warehouseConfig: any = {
-        type: selectedWarehouse.name.toLowerCase(),
-        ...credentials
-      };
-
-      console.log('Warehouse config:', warehouseConfig);
-
-      // Run the pipeline
-      console.log('Running pipeline with:', {
-        organization: linkDetails.organization,
-        destination: selectedWarehouse.name,
-        datasetName: `${linkDetails.organization}-${linkDetails.type}-dataset`
-      });
-
-      const result = await runPipeline(
-        linkDetails.organization,
-        selectedWarehouse.name,
-        `${linkDetails.organization}-${linkDetails.type}-dataset`
-      );
-      console.log('Pipeline execution result:', result);
       
-      if (result.status === 200) {
-        setSuccess(true);
-        setStep(3); // Move to success step
-      } else {
-        throw new Error(`Pipeline execution failed with status ${result.status}`);
+      console.log('Attempting to connect with credentials:', credentials);
+      setIsLoading(true);
+      setError(null);
+      try {
+        if (!selectedWarehouse || !selectedWarehouse.name) {
+          throw new Error('No warehouse selected. Please select a warehouse and try again.');
+        }
+  
+        // Validate credentials
+        const requiredFields = ['username', 'password', 'host', 'database'] as const;
+        const missingFields = requiredFields.filter(field => !credentials[field]);
+        if (missingFields.length > 0) {
+          throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
+        }
+  
+        // Run the pipeline
+        console.log('Running pipeline with:', {
+          organization: linkDetails.organization,
+          destination: selectedWarehouse.name,
+          datasetName: `${linkDetails.organization}-${linkDetails.source}-dataset`
+        });
+  
+        const result = await runPipeline(
+          linkDetails.organization,
+          selectedWarehouse.name,
+          `${linkDetails.organization}-${linkDetails.source}-dataset`
+        );
+        console.log('Pipeline execution result:', result);
+        
+        if (result.status === 200) {
+          setSuccess(true);
+          setStep(3); // Move to success step
+        } else {
+          throw new Error(`Pipeline execution failed with status ${result.status}`);
+        }
+      } catch (error: unknown) {
+        console.error('Failed to set up import:', error);
+        if (error instanceof Error) {
+          setError(error.message || 'Failed to set up import. Please try again.');
+        } else {
+          setError('An unexpected error occurred. Please try again.');
+        }
+        // Log the full error object
+        console.error('Full error object:', JSON.stringify(error, null, 2));
+      } finally {
+        setIsLoading(false);
       }
-    } catch (error: unknown) {
-      console.error('Failed to set up import:', error);
-      if (error instanceof Error) {
-        setError(error.message || 'Failed to set up import. Please try again.');
-      } else {
-        setError('An unexpected error occurred. Please try again.');
-      }
-      // Log the full error object
-      console.error('Full error object:', JSON.stringify(error, null, 2));
-    } finally {
-      setIsLoading(false);
     }
-  }
-};
+  };
 
   const handleOAuthAuthorization = () => {
     if (selectedDestination && selectedDestination.oauthUrl) {

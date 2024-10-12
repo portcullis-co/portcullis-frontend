@@ -2,16 +2,19 @@ import { NextResponse } from 'next/server';
 import { nanoid } from 'nanoid';
 import { createClient } from '@/lib/supabase/server';
 import { clerkClient } from '@clerk/nextjs/server';
+import { auth } from '@clerk/nextjs/server';
 
 export async function POST(request: Request) {
   try {
     const supabase = createClient();
-    const { type, logo, redirectUrl } = await request.json();
+    const { userId, orgId } = auth();
+    const { type, logo, redirectUrl, source } = await request.json();
+
     const invite_token = nanoid(10);
 
     const { data, error } = await supabase
       .from('links')
-      .insert({ invite_token, type, logo, redirect_url: redirectUrl })
+      .insert({ invite_token, source, type, logo, redirect_url: redirectUrl, organization: orgId, stakeholder: userId })
       .select()
       .single();
 

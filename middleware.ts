@@ -25,6 +25,7 @@ const allowedRoutes = [
   '/api/links(.*)',
   '/api/sources',
   '/api/import',
+  '/api/check-connection',
   '/import/(.*)',
   '/import/lDF3tpEADq',
   '/sources',
@@ -39,7 +40,7 @@ const allowedRoutes = [
 
 const allowedOrigins = [
   'http://localhost:3000',
-  'https://7400-2600-1700-3aa5-b800-e4c8-961a-e731-bd60.ngrok-free.app'
+  'https://5f2d-2600-1700-3aa5-b800-e4c8-961a-e731-bd60.ngrok-free.app '
 ];
 
 function corsMiddleware(request: NextRequest, response: NextResponse) {

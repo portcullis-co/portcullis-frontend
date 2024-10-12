@@ -19,6 +19,10 @@ const nextConfig = {
       test: /\.svg$/,
       use: ['@svgr/webpack'],
     });
+    config.module.rules.push({
+      test: /\.html$/,
+      use: ['html-loader'],
+    });
     return config;
   },
 };
