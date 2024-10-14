@@ -40,8 +40,8 @@ export function DataWarehouseForm({ onConnect }: { onConnect: (warehouseType: st
               onChange={(e) => handleCredentialChange('port', e.target.value)}
             />
             <Input
-              placeholder="Username"
-              onChange={(e) => handleCredentialChange('username', e.target.value)}
+              placeholder="User"
+              onChange={(e) => handleCredentialChange('user', e.target.value)}
             />
             <Input
               type="password"
@@ -120,8 +120,8 @@ export function DataWarehouseForm({ onConnect }: { onConnect: (warehouseType: st
               onChange={(e) => handleCredentialChange('database', e.target.value)}
             />
             <Input
-              placeholder="Username"
-              onChange={(e) => handleCredentialChange('username', e.target.value)}
+              placeholder="User"
+              onChange={(e) => handleCredentialChange('User', e.target.value)}
             />
             <Input
               type="password"

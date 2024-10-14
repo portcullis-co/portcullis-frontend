@@ -33,7 +33,7 @@ interface Credentials {
     snowflake: ['account', 'user', 'password', 'warehouse', 'database', 'schema'],
     bigquery: ['project_id', 'private_key', 'client_email'],
     redshift: ['host', 'port', 'database', 'user', 'password'],
-    clickhouse: ['host', 'port', 'database', 'username', 'password'], // Add Clickhouse credentials
+    clickhouse: ['host', 'port', 'database', 'user', 'password'], // Add Clickhouse credentials
   };
   
   export default function SourcesListPage() {

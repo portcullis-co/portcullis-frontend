@@ -70,7 +70,7 @@ export async function POST(request: Request) {
       snowflake: ['account', 'username', 'password', 'warehouse', 'database', 'schema'],
       bigquery: ['project_id', 'private_key', 'client_email'],
       redshift: ['host', 'port', 'database', 'user', 'password'],
-      clickhouse: ['host', 'port', 'database', 'username', 'password'],
+      clickhouse: ['host', 'port', 'database', 'user', 'password'],
     };
   
     const fields = requiredFields[type];

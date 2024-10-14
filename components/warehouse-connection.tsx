@@ -158,7 +158,7 @@ export default function WarehouseConnection({ token, onClose }: WarehouseConnect
   
     console.log('Sending request to pipeline API:', JSON.stringify(requestBody, null, 2));
   
-    const response = await fetch('http://localhost:8000/pipeline', {
+    const response = await fetch('http://localhost:8000/transfer', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -276,7 +276,13 @@ export default function WarehouseConnection({ token, onClose }: WarehouseConnect
         }
   
         // Validate credentials
-        const requiredFields = ['username', 'password', 'host', 'database'] as const;
+        const requiredFields: Array<'password' | 'host' | 'database' | 'user' | 'username'> = ['password', 'host', 'database'];
+
+        if (selectedWarehouse.name === 'Clickhouse') {
+          requiredFields.push('user');
+        } else {
+          requiredFields.push('username');
+        }
         const missingFields = requiredFields.filter(field => !credentials[field]);
         if (missingFields.length > 0) {
           throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
@@ -447,9 +453,12 @@ export default function WarehouseConnection({ token, onClose }: WarehouseConnect
                 <h3 className="text-lg font-medium mb-4">Enter your credentials</h3>
                 <div className="space-y-4">
                   <Input 
-                    placeholder="Username or Account Name" 
-                    value={credentials.username}
-                    onChange={(e) => setCredentials({...credentials, username: e.target.value})}
+                    placeholder={selectedWarehouse?.name === 'Clickhouse' ? "User" : "Username or Account Name"}
+                    value={selectedWarehouse?.name === 'Clickhouse' ? credentials.user : credentials.username}
+                    onChange={(e) => setCredentials({
+                      ...credentials, 
+                      [selectedWarehouse?.name === 'Clickhouse' ? 'user' : 'username']: e.target.value
+                    })}
                   />
                   <Input 
                     type="password" 
