@@ -1,7 +1,0 @@
-{
-  "version": 3,
-  "sources": ["../../../../../../app/trigger/example.ts"],
-  "sourcesContent": ["import { logger, schedules, wait } from \"@trigger.dev/sdk/v3\";\n\nexport const firstScheduledTask = schedules.task({\n  id: \"first-scheduled-task\",\n  //every hour\n  cron: \"0 * * * *\",\n  run: async (payload, { ctx }) => {\n    // The payload contains the last run timestamp that you can use to check if this is the first run\n    // And calculate the time since the last run\n    const distanceInMs =\n      payload.timestamp.getTime() - (payload.lastTimestamp ?? new Date()).getTime();\n\n    logger.log(\"First scheduled tasks\", { payload, distanceInMs });\n\n    // Wait for 5 seconds\n    await wait.for({ seconds: 5 });\n\n    // Format the timestamp using the timezone from the payload\n    const formatted = payload.timestamp.toLocaleString(\"en-US\", {\n      timeZone: payload.timezone,\n    });\n\n    logger.log(formatted);\n  },\n});"],
-  "mappings": ";;;;;;;;;;AAAA;AAEO,IAAM,qBAAqB,kBAAU,KAAK;AAAA,EAC/C,IAAI;AAAA;AAAA,EAEJ,MAAM;AAAA,EACN,KAAK,OAAO,SAAS,EAAE,IAAI,MAAM;AAG/B,UAAM,eACJ,QAAQ,UAAU,QAAQ,KAAK,QAAQ,iBAAiB,oBAAI,KAAK,GAAG,QAAQ;AAE9E,WAAO,IAAI,yBAAyB,EAAE,SAAS,aAAa,CAAC;AAG7D,UAAM,KAAK,IAAI,EAAE,SAAS,EAAE,CAAC;AAG7B,UAAM,YAAY,QAAQ,UAAU,eAAe,SAAS;AAAA,MAC1D,UAAU,QAAQ;AAAA,IACpB,CAAC;AAED,WAAO,IAAI,SAAS;AAAA,EACtB;AACF,CAAC;",
-  "names": []
-}
