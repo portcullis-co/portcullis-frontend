@@ -10,6 +10,7 @@ import {
 	UserButton
   } from '@clerk/nextjs'
 import './globals.css'
+import { Toaster } from '@/components/ui/toaster';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -25,6 +26,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 			<ThemeProvider attribute='class' defaultTheme='light' enableSystem>
 			<ClerkProvider>
 				<body className={inter.className}>{children}</body>
+				<Toaster />
 			</ClerkProvider>
 			</ThemeProvider>
 		</html>

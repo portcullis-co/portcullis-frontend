@@ -3,25 +3,25 @@ import { createClient } from '@/lib/supabase/server';
 import { auth } from '@clerk/nextjs/server';
 
 export async function GET(request: Request) {
-    const supabase = createClient();
-    const { searchParams } = new URL(request.url);
-    const organizationId = searchParams.get('organizationId');
-  
-    if (!organizationId) {
-      return NextResponse.json({ error: 'Organization ID is required' }, { status: 400 });
-    }
-  
-    const { data: warehouses, error } = await supabase
-      .from('warehouses')
-      .select('*')
-      .eq('organization', organizationId);
-  
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-  
-    return NextResponse.json({ warehouses });
+  const supabase = createClient();
+  const { searchParams } = new URL(request.url);
+  const organizationId = searchParams.get('organizationId');
+
+  if (!organizationId) {
+    return NextResponse.json({ error: 'Organization ID is required' }, { status: 400 });
   }
+
+  const { data: warehouses, error } = await supabase
+    .from('warehouses')
+    .select('id, internal_type, created_at')
+    .eq('organization', organizationId);
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ warehouses });
+}
 
 export async function POST(request: Request) {
     const supabase = createClient();
@@ -33,21 +33,21 @@ export async function POST(request: Request) {
     }
     
     try {
-      const { type, credentials } = await request.json();
+      const { internal_type, credentials } = await request.json();
   
       // Validate input
-      if (!type || !credentials) {
+      if (!internal_type || !credentials) {
         return NextResponse.json({ error: 'Type and credentials are required' }, { status: 400 });
       }
   
       // Validate credentials
-      if (!validateCredentials(type, credentials)) {
+      if (!validateCredentials(internal_type, credentials)) {
         return NextResponse.json({ error: 'Invalid credentials for the selected type' }, { status: 400 });
       }
   
       const { data, error } = await supabase
         .from('warehouses')
-        .insert({ type, credentials, organization: orgId, slug  })
+        .insert({ internal_type, credentials, organization: orgId, slug  })
         .select()
         .single();
   
@@ -74,7 +74,7 @@ export async function POST(request: Request) {
   
     const fields = requiredFields[type];
     if (!fields) return false;
-  
+    console.log('Credentials:', credentials);
     return fields.every(field => credentials[field] && credentials[field].trim() !== '');
   }
 

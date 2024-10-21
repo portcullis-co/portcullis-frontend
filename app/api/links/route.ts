@@ -7,20 +7,26 @@ export async function POST(request: Request) {
   try {
     const supabase = createClient();
     const { userId, orgId } = auth();
-    const { type, logo, redirectUrl, internal_warehouse } = await request.json();
+    const { logo, redirectUrl, internal_warehouse, internal_type } = await request.json();
+
+    if (!orgId) {
+      return NextResponse.json({ error: 'Unauthorized: No organization ID' }, { status: 401 });
+    }
 
     const invite_token = nanoid(10);
 
     const { data, error } = await supabase
       .from('links')
       .insert({ 
-        invite_token: invite_token, 
-        internal_warehouse: internal_warehouse, 
-        type: type, 
-        logo: logo, 
-        redirect_url: redirectUrl, 
-        organization: orgId // This will now work with Clerk's organization ID format
+        invite_token,
+        internal_warehouse,
+        internal_type,
+        logo,
+        redirect_url: redirectUrl,
+        organization: orgId
       })
+      .select()
+      .single();
 
     if (error) {
       console.error('Supabase error:', error);
@@ -36,11 +42,16 @@ export async function POST(request: Request) {
 
 export async function GET() {
   const supabase = createClient();
-  
+  const { userId, orgId } = auth();
+
+  if (!orgId) {
+    return NextResponse.json({ error: 'Unauthorized: No organization ID' }, { status: 401 });
+  }
 
   const { data, error } = await supabase
     .from('links')
     .select('*')
+    .eq('organization', orgId)
     .order('created_at', { ascending: false });
 
   if (error) {
@@ -53,12 +64,17 @@ export async function GET() {
 export async function DELETE(request: Request) {
   try {
     const supabase = createClient();
+    const { userId, orgId } = auth();
     const { id } = await request.json();
+
+    if (!orgId) {
+      return NextResponse.json({ error: 'Unauthorized: No organization ID' }, { status: 401 });
+    }
 
     const { error } = await supabase
       .from('links')
       .delete()
-      .match({ id });
+      .match({ id, organization: orgId });
 
     if (error) {
       console.error('Supabase error:', error);

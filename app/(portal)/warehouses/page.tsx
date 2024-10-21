@@ -21,7 +21,7 @@ interface Warehouse {
   organization: string;
   id: string;
   status: string;
-  type?: string;
+  internal_type?: string;
   credentials: Credentials; // Or specify the correct type for credentials
   // Add other properties as needed
 }
@@ -33,13 +33,13 @@ interface Credentials {
     snowflake: ['account', 'username', 'password', 'warehouse', 'database', 'schema'],
     bigquery: ['project_id', 'private_key', 'client_email'],
     redshift: ['host', 'port', 'database', 'user', 'password'],
-    clickhouse: ['host', 'port', 'database', 'user', 'password'], // Add Clickhouse credentials
+    clickhouse: ['host', 'port', 'database', 'username', 'password'], // Add Clickhouse credentials
   };
   
   export default function InternalWarehouseListPage() {
     const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
-    const [newWarehouse, setNewWarehouse] = useState({ type: '', credentials: {} as Credentials });
+    const [newWarehouse, setNewWarehouse] = useState({ internal_type: '', credentials: {} as Credentials });
     const [error, setError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const supabase = createClient();
@@ -123,7 +123,7 @@ interface Credentials {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             organization: orgId,
-            type: newWarehouse.type,
+            internal_type: newWarehouse.internal_type,
             credentials: newWarehouse.credentials,
           }),
         });
@@ -136,7 +136,7 @@ interface Credentials {
         const data = await response.json();
         setWarehouses([...warehouses, data]);
         setIsDialogOpen(false);
-        setNewWarehouse({ type: '', credentials: {} });
+        setNewWarehouse({ internal_type: '', credentials: {} });
         toast({
           title: "Warehouse Added",
           description: "The new internal warehouse has been successfully added.",
@@ -159,8 +159,8 @@ interface Credentials {
     };
   
     const renderCredentialFields = () => {
-      if (!newWarehouse.type) return null;
-      const fields = credentialFields[newWarehouse.type as keyof typeof credentialFields];
+      if (!newWarehouse.internal_type) return null;
+      const fields = credentialFields[newWarehouse.internal_type as keyof typeof credentialFields];
       return fields.map(field => (
         <div key={field} className="grid grid-cols-4 items-center gap-4">
           <Label htmlFor={field} className="text-right">{field}</Label>
@@ -214,8 +214,8 @@ interface Credentials {
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="type" className="text-right">Type</Label>
                 <Select 
-                  onValueChange={(value) => setNewWarehouse({ type: value, credentials: {} })} 
-                  value={newWarehouse.type}
+                  onValueChange={(value) => setNewWarehouse({ internal_type: value, credentials: {} })} 
+                  value={newWarehouse.internal_type}
                 >
                   <SelectTrigger className="col-span-3">
                     <SelectValue placeholder="Select warehouse type" />
@@ -248,8 +248,8 @@ interface Credentials {
                 <tr key={warehouse.id}>
                     <td className="px-6 py-4 whitespace-nowrap">{warehouse.id}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {warehouse.type 
-                        ? warehouse.type.charAt(0).toUpperCase() + warehouse.type.slice(1)
+                      {warehouse.internal_type 
+                        ? warehouse.internal_type.charAt(0).toUpperCase() + warehouse.internal_type.slice(1)
                         : 'Generic'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">

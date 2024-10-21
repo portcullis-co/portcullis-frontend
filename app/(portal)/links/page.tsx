@@ -10,23 +10,28 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { Toaster } from "@/components/ui/toaster"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@clerk/nextjs"
+import internal from 'stream';
 
 type Link = {
   id: string;
   url: string;
-  type: string;
   createdAt: string;
   imageUrl: string;
   redirectUrl: string;
+  invite_token: string;
   internal_warehouse: string;
+  internal_type: string;
 };
-async function createInviteLink(type: string, imageUrl: string, redirectUrl: string, internal_warehouse: string): Promise<Link> { // Update return type to Link
+async function createInviteLink(imageUrl: string, redirectUrl: string, internal_warehouse: string, internal_type: string): Promise<Link> {
   const response = await fetch('/api/links', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ type, logo: imageUrl, redirectUrl: redirectUrl, internal_warehouse: internal_warehouse }),
+    body: JSON.stringify({ logo: imageUrl, redirectUrl, internal_warehouse, internal_type }),
   });
-  if (!response.ok) throw new Error('Failed to create invite link');
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error || 'Failed to create invite link');
+  }
   return response.json();
 }
 
@@ -37,6 +42,7 @@ async function fetchInviteLinks() {
 }
 
 const capitalizeFirstLetter = (string: string) => {
+  if (!string) return ''; // Add this line to handle undefined or empty strings
   return string.charAt(0).toUpperCase() + string.slice(1).toLowerCase();
 };
 
@@ -63,9 +69,8 @@ async function fetchWarehouses(organizationId: string) {
 export default function InviteLinks() {
   const { organization } = useOrganization();
   const organizationId = organization?.id;
-  const [linkType, setLinkType] = useState('Import');
   const [links, setLinks] = useState<Link[]>([]);
-  const [warehouses, setWarehouses] = useState<Array<{ id: string; type: string; created_at: string }>>([]);
+  const [warehouses, setWarehouses] = useState<Array<{ id: string; internal_type: string; created_at: string }>>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [redirectUrl, setRedirectUrl] = useState('');
   const [selectedWarehouseId, setSelectedWarehouseId] = useState('');
@@ -100,26 +105,13 @@ export default function InviteLinks() {
       return;
     }
     try {
-      const warehousesData = await fetchWarehouses(organizationId);
-      console.log('Fetched warehouse data:', warehousesData); // Add this line for debugging
-      if (Array.isArray(warehousesData)) {
-        setWarehouses(warehousesData);
-      } else if (typeof warehousesData === 'object' && warehousesData !== null) {
-        // If the data is an object, try to extract an array from it
-        const warehousesArray = Object.values(warehousesData).flat();
-        console.log('Extracted warehouses array:', warehousesArray); // Add this line for debugging
-        console.log('Extracted warehouses array:', warehousesArray);
-        if (Array.isArray(warehousesArray) && warehousesArray.length > 0 && 
-            typeof warehousesArray[0] === 'object' && warehousesArray[0] !== null &&
-            'id' in warehousesArray[0] && 'type' in warehousesArray[0] && 'created_at' in warehousesArray[0]) {
-          setWarehouses(warehousesArray as Array<{ id: string; type: string; created_at: string }>);
-        } else {
-          console.error('Extracted data is not a valid array of warehouses:', warehousesArray);
-          showToast('Invalid warehouse data format', 'error');
-          setWarehouses([]);
-        }
+      const response = await fetchWarehouses(organizationId);
+      console.log('Fetched warehouse data:', response); // Log the entire response
+
+      if (response && Array.isArray(response.warehouses)) {
+        setWarehouses(response.warehouses);
       } else {
-        console.error('Fetched warehouses data is not an array or object:', warehousesData);
+        console.error('Invalid warehouses data format:', response);
         showToast('Invalid warehouses data format', 'error');
         setWarehouses([]);
       }
@@ -133,13 +125,21 @@ export default function InviteLinks() {
   const handleCreateLink = async () => {
     setIsLoading(true);
     try {
-      console.log('Selected Warehouse ID:', selectedWarehouseId); // Log the selectedWarehouseId
-      const newLink = await createInviteLink(linkType, imageUrl || '', redirectUrl, selectedWarehouseId);
-      setLinks((prevLinks) => [newLink, ...prevLinks]);
-      showToast('Invite link created successfully', 'success');
-      setRedirectUrl('');
-      setSelectedWarehouseId('');
-      setIsDialogOpen(false);
+      console.log('Selected Warehouse ID:', selectedWarehouseId);
+      const selectedWarehouse = warehouses.find(warehouse => warehouse.id === selectedWarehouseId);
+      const type = selectedWarehouse ? selectedWarehouse.internal_type : ''; 
+      const newLink = await createInviteLink(imageUrl || '', redirectUrl, selectedWarehouseId, type);
+      
+      if (newLink && newLink.invite_token) {
+        const copyableLink = `${window.location.origin}/invite/${newLink.invite_token}`;
+        setLinks((prevLinks) => [newLink, ...prevLinks]);
+        showToast('Invite link created successfully', 'success');
+        setRedirectUrl('');
+        setSelectedWarehouseId('');
+        setIsDialogOpen(false);
+      } else {
+        throw new Error('Invalid response from server');
+      }
     } catch (error) {
       console.error('Error creating invite link:', error);
       showToast('Failed to create invite link', 'error');
@@ -186,9 +186,9 @@ export default function InviteLinks() {
               </SelectTrigger>
               <SelectContent>
                 {warehouses.length > 0 ? (
-                  warehouses.map((warehouse: { id: string; type: string; created_at: string }) => (
+                  warehouses.map((warehouse: { id: string; internal_type: string; created_at: string }) => (
                     <SelectItem key={warehouse.id} value={warehouse.id}>
-                      {`${capitalizeFirstLetter(warehouse.type)} - ${formatDate(warehouse.created_at)}`}
+                      {`${capitalizeFirstLetter(warehouse.internal_type)} - ${formatDate(warehouse.created_at)}`}
                     </SelectItem>
                   ))
                 ) : (
@@ -216,24 +216,24 @@ export default function InviteLinks() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {links.map((row) => row && (
-            <TableRow key={row.id}>
-              <TableCell>
-                <CopyLinkInput link={`${window.location.origin}/${row.type.toLowerCase()}/${row.id}`} />
-              </TableCell>
-              <TableCell>{row.type}</TableCell>
-              <TableCell>
-                <Button 
-                  onClick={() => handleDeleteLink(row.id)} 
-                  variant="destructive"
-                  disabled={isLoading}
-                >
-                  Delete
-                </Button>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
+        {links.map((row) => row && (
+          <TableRow key={row.id}>
+            <TableCell>
+              <CopyLinkInput link={`${window.location.origin}/invite/${row.invite_token}`} /> {/* Use invite_token for the link */}
+            </TableCell>
+            <TableCell>{row.internal_type}</TableCell>
+            <TableCell>
+              <Button 
+                onClick={() => handleDeleteLink(row.id)} 
+                variant="destructive"
+                disabled={isLoading}
+              >
+                Delete
+              </Button>
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
       </Table>
         <Toaster />
     </div>

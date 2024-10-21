@@ -14,6 +14,9 @@ import { createClient } from '@/lib/supabase/client'
 import { Database } from 'lucide-react'  // or your preferred icon library
 import Image from 'next/image';
 import { link } from 'fs'
+import { DataWarehouseForm } from "@/components/data-warehouse-form"; // Import the DataWarehouseForm
+import { toast, useToast } from '@/hooks/use-toast'
+import { Toaster } from './ui/toaster'
 
 interface Warehouse {
   id: string
@@ -22,15 +25,16 @@ interface Warehouse {
   connected: boolean
 }
 
+// Update the Credentials interface
 interface Credentials {
-  username: string;
-  password: string;
-  host: string;
-  database: string;
-  warehouse: string;
-  projectId: string;
-  keyFilename: string;
-  path: string;
+  username: string | null; // Changed from any to string | null
+  password: string | null; // Ensure this is also string | null
+  host: string | null;
+  database: string | null;
+  warehouse: string | null;
+  projectId: string | null;
+  keyFilename: string | null;
+  path: string | null;
 }
 
 interface WarehouseConnectionProps {
@@ -39,7 +43,7 @@ interface WarehouseConnectionProps {
 }
 
 interface LinkDetails {
-  type: string;
+  internal_type: string;
   logo: string;
   redirect_url: string;
   internal_warehouse: string;
@@ -85,18 +89,16 @@ export default function WarehouseConnection({ token, onClose }: WarehouseConnect
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-  const [credentials, setCredentials] = useState({
-    username: '',
-    user: '',
-    password: '',
-    host: '',
-    database: '',
-    warehouse: '', // For Snowflake
-    projectId: '', // For BigQuery
-    keyFilename: '', // For BigQuery
-    path: '', // For Databricks
-    // Add any other necessary fields
-  })
+  const [credentials, setCredentials] = useState<Credentials>({
+    username: null,
+    password: null,
+    host: null,
+    database: null,
+    warehouse: null,
+    projectId: null,
+    keyFilename: null,
+    path: null,
+  });
 
   const containerRef = useRef<HTMLDivElement>(null)
   const linkLogoRef = useRef<HTMLDivElement>(null)
@@ -106,6 +108,7 @@ export default function WarehouseConnection({ token, onClose }: WarehouseConnect
   const runPipeline = async (organization: string, destination: string ) => {
     const supabase = createClient();
     const internal_warehouse = linkDetails?.internal_warehouse;
+    const internal_type = linkDetails?.internal_type
   
     if (!internal_warehouse) {
       console.error('Internal warehouse is undefined');
@@ -123,8 +126,6 @@ export default function WarehouseConnection({ token, onClose }: WarehouseConnect
       .eq('id', internal_warehouse)
       .maybeSingle();
 
-    console.log('Query result:', { data: credentialsData, error: credentialsError });
-  
     if (credentialsError) {
       console.error('Error fetching warehouse:', credentialsError);
       throw new Error(`Failed to fetch warehouse: ${credentialsError.message}`);
@@ -143,16 +144,28 @@ export default function WarehouseConnection({ token, onClose }: WarehouseConnect
     const requestBody = {
       organization: linkDetails?.organization,
       internal_warehouse: internal_warehouse,
-      type: linkDetails?.type,
-      link_warehouse: credentialsData?.type ? credentialsData.type.charAt(0).toUpperCase() + credentialsData.type.slice(1) : undefined,
-      internal_type: selectedWarehouse?.name,
+      link_type: selectedWarehouse?.name,
+      internal_type: linkDetails?.internal_type,
       link_credentials: credentials,
       internal_credentials: credentialsData.credentials,
     };
+    console.log(selectedWarehouse?.name)
+    // Map warehouse types to their respective sync routes
+    const syncRoutes: { [key: string]: string } = {
+      'Clickhouse': '/api/sync/clickhouse',
+      'BigQuery': '/api/sync/bigquery',
+      'Postgres': '/api/sync/postgres',
+      'Snowflake': '/api/sync/snowflake',
+    };
+    const syncRoute = syncRoutes[selectedWarehouse?.name ?? ''];
+
+    if (!syncRoute) {
+      throw new Error(`No sync route defined for warehouse type: ${selectedWarehouse?.name ?? 'Unknown'}`);
+    }
   
     console.log('Sending request to pipeline API:', JSON.stringify(requestBody, null, 2));
   
-    const response = await fetch('/api/sync', {
+    const response = await fetch(syncRoute, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -177,34 +190,34 @@ export default function WarehouseConnection({ token, onClose }: WarehouseConnect
     console.log('fetchLinkDetails called with token:', token);
     const supabase = createClient();
     const { data, error } = await supabase
-      .from('links')
-      .select('type, logo, redirect_url, organization, internal_warehouse')
-      .eq('invite_token', token)
-      .single();
-  
+        .from('links')
+        .select('internal_type, logo, redirect_url, organization, internal_warehouse')
+        .eq('invite_token', token)
+        .single();
+
     if (error) {
-      console.error('Error fetching warehouse details:', error);
-      return null;
+        console.error('Error fetching warehouse details:', error);
+        return null;
     }
-  
+
     console.log('Raw data from supabase:', data);
-  
+
     if (!data) {
-      console.error('No data returned from supabase');
-      return null;
+        console.error('No data returned from supabase');
+        return null;
     }
-  
+
     const details: LinkDetails = {
-      type: data.type ?? '',
-      internal_warehouse: data.internal_warehouse,
-      organization: data.organization,
-      logo: data.logo,
-      redirect_url: data.redirect_url,
+        internal_type: data.internal_type ?? '',
+        internal_warehouse: data.internal_warehouse,
+        organization: data.organization,
+        logo: data.logo,
+        redirect_url: data.redirect_url,
     };
-  
+
     console.log('Returning link details:', details);
     return details;
-  };
+};
 
   useEffect(() => {
     console.log('useEffect triggered. Token:', token);
@@ -246,6 +259,13 @@ export default function WarehouseConnection({ token, onClose }: WarehouseConnect
     wh.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const validateHost = (host: string) => {
+    if (!host.startsWith('http://') && !host.startsWith('https://')) {
+      return "Host must start with http:// or https://"
+    }
+    return null
+  }
+
   const handleContinue = async () => {
     console.log('handleContinue called, current step:', step);
     console.log('Current linkDetails:', linkDetails);
@@ -274,8 +294,13 @@ export default function WarehouseConnection({ token, onClose }: WarehouseConnect
         if (missingFields.length > 0) {
           throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
         }
-  
-  
+
+        if (credentials.host) {
+          const hostError = validateHost(credentials.host);
+          if (hostError) {
+            throw new Error(hostError);
+          }
+        }
         const result = await runPipeline(
           linkDetails.organization,
           selectedWarehouse.name,
@@ -308,6 +333,74 @@ export default function WarehouseConnection({ token, onClose }: WarehouseConnect
       window.open(selectedDestination.oauthUrl, '_blank', 'width=600,height=600')
     }
   }
+
+  const renderWarehouseFields = () => {
+    if (!selectedWarehouse) return null;
+  
+    switch (selectedWarehouse.name) {
+      case 'Clickhouse':
+        return (
+          <>
+            <Input 
+              placeholder="Username"
+              value={credentials.username ?? ''}
+              onChange={(e) => setCredentials({...credentials, username: e.target.value || null})}
+            />
+            <Input 
+              type="password" 
+              placeholder="Password"
+              value={credentials.password ?? ''}
+              onChange={(e) => setCredentials({...credentials, password: e.target.value || null})}
+            />
+            <Input 
+              placeholder="Host (e.g., https://your-host.com)"
+              value={credentials.host ?? ''}
+              onChange={handleHostChange}
+            />
+            <Input 
+              placeholder="Database Name"
+              value={credentials.database ?? ''}
+              onChange={(e) => setCredentials({...credentials, database: e.target.value || null})}
+            />
+          </>
+        );
+      case 'Snowflake':
+        return (
+          <>
+            <Input 
+              placeholder="Account Name"
+              value={credentials.username ?? ''}
+              onChange={(e) => setCredentials({...credentials, username: e.target.value || null})}
+            />
+            <Input 
+              type="password" 
+              placeholder="Password"
+              value={credentials.password ?? ''}
+              onChange={(e) => setCredentials({...credentials, password: e.target.value || null})}
+            />
+            <Input 
+              placeholder="Host (e.g., https://your-account.snowflakecomputing.com)"
+              value={credentials.host ?? ''}
+              onChange={handleHostChange}
+            />
+            <Input 
+              placeholder="Warehouse"
+              value={credentials.warehouse ?? ''}
+              onChange={(e) => setCredentials({...credentials, warehouse: e.target.value || null})}
+            />
+            <Input 
+              placeholder="Database Name"
+              value={credentials.database ?? ''}
+              onChange={(e) => setCredentials({...credentials, database: e.target.value || null})}
+            />
+          </>
+        );
+      default:
+        return (
+          <p>Configuration for {selectedWarehouse.name} is not available at the moment.</p>
+        );
+    }
+  };
 
   const handleWarehouseSelection = (warehouse: Warehouse) => {
     setSelectedWarehouse(warehouse);
@@ -363,6 +456,11 @@ export default function WarehouseConnection({ token, onClose }: WarehouseConnect
       />
     </div>
   )
+
+  const handleHostChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = e.target.value || null;
+    setCredentials({ ...credentials, host: newValue });
+  };
 
   const renderStep = () => {
     switch (step) {
@@ -430,36 +528,17 @@ export default function WarehouseConnection({ token, onClose }: WarehouseConnect
           case 2:
             return (
               <div className="p-6">
-                <h3 className="text-lg font-medium mb-4">Enter your credentials</h3>
-                <div className="space-y-4">
-                  <Input 
-                    placeholder={selectedWarehouse?.name === 'Clickhouse' ? "User" : "Username or Account Name"}
-                    value={selectedWarehouse?.name === 'Clickhouse' ? credentials.user : credentials.username}
-                    onChange={(e) => setCredentials({
-                      ...credentials, 
-                      [selectedWarehouse?.name === 'Clickhouse' ? 'user' : 'username']: e.target.value
-                    })}
-                  />
-                  <Input 
-                    type="password" 
-                    placeholder="Password or Access Token"
-                    value={credentials.password}
-                    onChange={(e) => setCredentials({...credentials, password: e.target.value})}
-                  />
-                  <Input 
-                    placeholder="Host or Region"
-                    value={credentials.host}
-                    onChange={(e) => setCredentials({...credentials, host: e.target.value})}
-                  />
-                  <Input 
-                    placeholder="Database Name"
-                    value={credentials.database}
-                    onChange={(e) => setCredentials({...credentials, database: e.target.value})}
-                  />
-                  <Button onClick={handleContinue} className="w-full">
+                <h3 className="text-lg font-medium mb-4">Enter your {selectedWarehouse?.name} credentials</h3>
+                <form onSubmit={(e) => {
+                  e.preventDefault();
+                  handleContinue();
+                }} className="space-y-4">
+                  {renderWarehouseFields()}
+                  <Button type="submit" className="w-full">
                     {isLoading ? 'Connecting...' : 'Connect'}
                   </Button>
-                </div>
+                  {error && <p className="text-red-500 mt-2">{error}</p>}
+                </form>
               </div>
             )
 
