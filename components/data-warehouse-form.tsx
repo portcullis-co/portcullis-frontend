@@ -9,7 +9,7 @@ const warehouseOptions = [
   { value: 'clickhouse', label: 'Clickhouse', logo: '/path/to/clickhouse-logo.png' },
   { value: 'snowflake', label: 'Snowflake', logo: '/path/to/snowflake-logo.png' },
   { value: 'bigquery', label: 'BigQuery', logo: '/path/to/bigquery-logo.png' },
-  { value: 'databricks', label: 'Databricks', logo: '/path/to/databricks-logo.png' },
+  { value: 'Redshift (Coming Soon)', label: 'Redshift (Coming Soon)', logo: 'https://cdn.worldvectorlogo.com/logos/postgresql.svg' },
   { value: 'postgres', label: 'Postgres', logo: '/path/to/postgres-logo.png' },
 ];
 
@@ -40,8 +40,8 @@ export function DataWarehouseForm({ onConnect }: { onConnect: (warehouseType: st
               onChange={(e) => handleCredentialChange('port', e.target.value)}
             />
             <Input
-              placeholder="User"
-              onChange={(e) => handleCredentialChange('user', e.target.value)}
+              placeholder="Username"
+              onChange={(e) => handleCredentialChange('username', e.target.value)}
             />
             <Input
               type="password"

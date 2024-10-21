@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table"
 import { Toaster } from "@/components/ui/toaster"
 import { useToast } from "@/hooks/use-toast"
+import { useAuth } from "@clerk/nextjs"
 
 type Link = {
   id: string;
@@ -17,14 +18,13 @@ type Link = {
   createdAt: string;
   imageUrl: string;
   redirectUrl: string;
-  sourceId: string;
+  internal_warehouse: string;
 };
-
-async function createInviteLink(type: string, imageUrl: string, redirectUrl: string, sourceId: string): Promise<{ id: string; url: string; type: string; createdAt: string; imageUrl: string; redirectUrl: string; sourceId: string }> {
+async function createInviteLink(type: string, imageUrl: string, redirectUrl: string, internal_warehouse: string): Promise<Link> { // Update return type to Link
   const response = await fetch('/api/links', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ type, logo: imageUrl, redirectUrl, source: sourceId }),
+    body: JSON.stringify({ type, logo: imageUrl, redirectUrl: redirectUrl, internal_warehouse: internal_warehouse }),
   });
   if (!response.ok) throw new Error('Failed to create invite link');
   return response.json();
@@ -54,9 +54,9 @@ async function deleteInviteLink(id: string): Promise<void> {
   if (!response.ok) throw new Error('Failed to delete invite link');
 }
 
-async function fetchSources(organizationId: string) {
-  const response = await fetch(`/api/sources?organizationId=${organizationId}`);
-  if (!response.ok) throw new Error('Failed to fetch sources');
+async function fetchWarehouses(organizationId: string) {
+  const response = await fetch(`/api/warehouses?organizationId=${organizationId}`);
+  if (!response.ok) throw new Error('Failed to fetch warehouses');
   return response.json();
 }
 
@@ -65,10 +65,10 @@ export default function InviteLinks() {
   const organizationId = organization?.id;
   const [linkType, setLinkType] = useState('Import');
   const [links, setLinks] = useState<Link[]>([]);
-  const [sources, setSources] = useState<Array<{ id: string; type: string; created_at: string }>>([]);
+  const [warehouses, setWarehouses] = useState<Array<{ id: string; type: string; created_at: string }>>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [redirectUrl, setRedirectUrl] = useState('');
-  const [selectedSourceId, setSelectedSourceId] = useState('');
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const imageUrl = useOrganization().organization?.imageUrl;
   const { toast } = useToast() // Add this line
@@ -76,7 +76,7 @@ export default function InviteLinks() {
   useEffect(() => {
     loadLinks();
     if (organizationId) {
-      loadSources();
+      loadWarehouses();
     }
   }, [organizationId]);
 
@@ -84,58 +84,61 @@ export default function InviteLinks() {
     setIsLoading(true);
     try {
       const fetchedLinks = await fetchInviteLinks();
-      setLinks(fetchedLinks);
+      console.log('Fetched links:', fetchedLinks); // Log the fetched links
+      setLinks(fetchedLinks.filter((link: any) => link !== null)); // Filter out any null links
     } catch (error) {
       console.error('Error fetching links:', error);
       showToast('Failed to load invite links', 'error');
     }
     setIsLoading(false);
   };
-  const loadSources = async () => {
+  
+  const loadWarehouses = async () => {
     if (!organizationId) {
       console.error('No organization ID available');
-      showToast('Failed to load sources: No organization ID', 'error');
+      showToast('Failed to load warehouses: No organization ID', 'error');
       return;
     }
     try {
-      const sourcesData = await fetchSources(organizationId);
-      console.log('Fetched sources data:', sourcesData); // Add this line for debugging
-      if (Array.isArray(sourcesData)) {
-        setSources(sourcesData);
-      } else if (typeof sourcesData === 'object' && sourcesData !== null) {
+      const warehousesData = await fetchWarehouses(organizationId);
+      console.log('Fetched warehouse data:', warehousesData); // Add this line for debugging
+      if (Array.isArray(warehousesData)) {
+        setWarehouses(warehousesData);
+      } else if (typeof warehousesData === 'object' && warehousesData !== null) {
         // If the data is an object, try to extract an array from it
-        const sourcesArray = Object.values(sourcesData).flat();
-        console.log('Extracted sources array:', sourcesArray); // Add this line for debugging
-        console.log('Extracted sources array:', sourcesArray);
-        if (Array.isArray(sourcesArray) && sourcesArray.length > 0 && 
-            typeof sourcesArray[0] === 'object' && sourcesArray[0] !== null &&
-            'id' in sourcesArray[0] && 'type' in sourcesArray[0] && 'created_at' in sourcesArray[0]) {
-          setSources(sourcesArray as Array<{ id: string; type: string; created_at: string }>);
+        const warehousesArray = Object.values(warehousesData).flat();
+        console.log('Extracted warehouses array:', warehousesArray); // Add this line for debugging
+        console.log('Extracted warehouses array:', warehousesArray);
+        if (Array.isArray(warehousesArray) && warehousesArray.length > 0 && 
+            typeof warehousesArray[0] === 'object' && warehousesArray[0] !== null &&
+            'id' in warehousesArray[0] && 'type' in warehousesArray[0] && 'created_at' in warehousesArray[0]) {
+          setWarehouses(warehousesArray as Array<{ id: string; type: string; created_at: string }>);
         } else {
-          console.error('Extracted data is not a valid array of sources:', sourcesArray);
-          showToast('Invalid sources data format', 'error');
-          setSources([]);
+          console.error('Extracted data is not a valid array of warehouses:', warehousesArray);
+          showToast('Invalid warehouse data format', 'error');
+          setWarehouses([]);
         }
       } else {
-        console.error('Fetched sources data is not an array or object:', sourcesData);
-        showToast('Invalid sources data format', 'error');
-        setSources([]);
+        console.error('Fetched warehouses data is not an array or object:', warehousesData);
+        showToast('Invalid warehouses data format', 'error');
+        setWarehouses([]);
       }
     } catch (error) {
-      console.error('Error fetching sources:', error);
-      showToast('Failed to load sources', 'error');
-      setSources([]);
+      console.error('Error fetching warehouses:', error);
+      showToast('Failed to load warehouses', 'error');
+      setWarehouses([]);
     }
   };
 
   const handleCreateLink = async () => {
     setIsLoading(true);
     try {
-      const newLink = await createInviteLink(linkType, imageUrl || '', redirectUrl, selectedSourceId);
+      console.log('Selected Warehouse ID:', selectedWarehouseId); // Log the selectedWarehouseId
+      const newLink = await createInviteLink(linkType, imageUrl || '', redirectUrl, selectedWarehouseId);
       setLinks((prevLinks) => [newLink, ...prevLinks]);
       showToast('Invite link created successfully', 'success');
       setRedirectUrl('');
-      setSelectedSourceId('');
+      setSelectedWarehouseId('');
       setIsDialogOpen(false);
     } catch (error) {
       console.error('Error creating invite link:', error);
@@ -177,22 +180,22 @@ export default function InviteLinks() {
             <DialogTitle>Create New Invite Link</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-          <Select value={selectedSourceId} onValueChange={setSelectedSourceId}>
-            <SelectTrigger>
-              <SelectValue placeholder="Select a source" />
-            </SelectTrigger>
-            <SelectContent>
-              {sources.length > 0 ? (
-                sources.map((source: { id: string; type: string; created_at: string }) => (
-                  <SelectItem key={source.id} value={source.id}>
-                    {`${capitalizeFirstLetter(source.type)} - ${formatDate(source.created_at)}`}
-                  </SelectItem>
-                ))
-              ) : (
-                <SelectItem value="no-sources" disabled>No sources available</SelectItem>
-              )}
-            </SelectContent>
-          </Select>
+          <Select value={selectedWarehouseId} onValueChange={setSelectedWarehouseId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select a warehouse" />
+              </SelectTrigger>
+              <SelectContent>
+                {warehouses.length > 0 ? (
+                  warehouses.map((warehouse: { id: string; type: string; created_at: string }) => (
+                    <SelectItem key={warehouse.id} value={warehouse.id}>
+                      {`${capitalizeFirstLetter(warehouse.type)} - ${formatDate(warehouse.created_at)}`}
+                    </SelectItem>
+                  ))
+                ) : (
+                  <SelectItem value="no-warehouses" disabled>No warehouses available</SelectItem>
+                )}
+              </SelectContent>
+            </Select>
             <Input
               value={redirectUrl}
               onChange={(e) => setRedirectUrl(e.target.value)}
@@ -213,7 +216,7 @@ export default function InviteLinks() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {links.map((row) => (
+          {links.map((row) => row && (
             <TableRow key={row.id}>
               <TableCell>
                 <CopyLinkInput link={`${window.location.origin}/${row.type.toLowerCase()}/${row.id}`} />

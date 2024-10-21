@@ -68,7 +68,7 @@ export default function AppsConnectionComponent({ onClose }: { onClose: () => vo
       { id: '1', name: 'Clickhouse', logo: 'https://cdn.brandfetch.io/idnezyZEJm/w/400/h/400/theme/dark/icon.jpeg?k=bfHSJFAPEG', connected: false },
       { id: '2', name: 'Snowflake', logo: 'https://cdn.brandfetch.io/idJz-fGD_q/theme/dark/symbol.svg?k=bfHSJFAPEG', connected: false },
       { id: '3', name: 'BigQuery', logo: '/placeholder.svg?height=40&width=40&text=BQ', connected: false },
-      { id: '4', name: 'Databricks', logo: '/placeholder.svg?height=40&width=40&text=DB', connected: false },
+      { id: '4', name: 'Redshift', logo: 'https://cdn.worldvectorlogo.com/logos/postgresql.svg', connected: false },
       { id: '5', name: 'Postgres', logo: '/placeholder.svg?height=40&width=40&text=PG', connected: false },
     ])
     setDestinations([
@@ -92,7 +92,7 @@ export default function AppsConnectionComponent({ onClose }: { onClose: () => vo
     if (step < 4) {
       setStep(step + 1)
     } else {
-      console.log("Final submission", { source: selectedWarehouse, destination: selectedDestination })
+      console.log("Final submission", { warehouse: selectedWarehouse, destination: selectedDestination })
       onClose() // Use the onClose prop instead of setIsOpen
     }
   }

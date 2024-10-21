@@ -1,0 +1,25 @@
+{
+  "configPath": "/Users/jdbohrman/portcullis-app/.trigger/tmp/build-8Ddqxc/portcullis-app/trigger.config.mjs",
+  "tasks": [
+    {
+      "id": "first-scheduled-task",
+      "triggerSource": "schedule",
+      "schedule": {
+        "cron": "0 * * * *",
+        "timezone": "UTC"
+      },
+      "filePath": "app/trigger/example.ts",
+      "exportName": "firstScheduledTask",
+      "entryPoint": "/Users/jdbohrman/portcullis-app/.trigger/tmp/build-8Ddqxc/portcullis-app/app/trigger/example.mjs"
+    },
+    {
+      "id": "etl-process",
+      "filePath": "app/trigger/sync.ts",
+      "exportName": "sync",
+      "entryPoint": "/Users/jdbohrman/portcullis-app/.trigger/tmp/build-8Ddqxc/portcullis-app/app/trigger/sync.mjs"
+    }
+  ],
+  "workerEntryPoint": "/Users/jdbohrman/portcullis-app/.trigger/tmp/build-8Ddqxc/Library/pnpm/store/v3/tmp/dlx-42941/node_modules/.pnpm/trigger.dev@3.0.13/node_modules/trigger.dev/dist/esm/entryPoints/dev-run-worker.mjs",
+  "runtime": "node",
+  "customConditions": []
+}

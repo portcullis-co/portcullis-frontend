@@ -1,0 +1,64 @@
+{
+  "contentHash": "4618862f0ae433691a11647c4ba911ba",
+  "runtime": "node",
+  "cliPackageVersion": "3.0.13",
+  "packageVersion": "3.0.13",
+  "environment": "dev",
+  "target": "dev",
+  "files": [
+    {
+      "entry": "app/trigger/example.ts",
+      "out": "/Users/jdbohrman/portcullis-app/.trigger/tmp/build-1SVJbC/portcullis-app/app/trigger/example.mjs"
+    },
+    {
+      "entry": "app/trigger/sync.ts",
+      "out": "/Users/jdbohrman/portcullis-app/.trigger/tmp/build-1SVJbC/portcullis-app/app/trigger/sync.mjs"
+    }
+  ],
+  "sources": {
+    "app/trigger/example.ts": {
+      "contents": "eJxtUk2L2zAQvftXPHyyi2MXyl4c0m2hLBTaU1IKvQlpbIvYUpDG2U2D/3uRHDsNLAYdPO9LT6OHk3WMK3rbtuQKeNmRGnvyBV6FZkxonB2QfmGnA6JUdK68OlbnT+k2Segt8qU1ntFo53l/E1AH4Y/Y3QVLFv6YXRNAqxppBG+WqdqEaVokQFXRmdwFnR1dAkhnTY30Iz7MX8S40dQQ/mIkspO49FaoAldIfsOUY/cZwSZI4dARboiQkoU2HtwReuE56ID1QJ7FcAJ3gnGxI6QwGD2BLWRH8gjdgDvtoWduzB7Ii8tXoyBFL8deMEVIUIXXRtKDWyTMbSntWRhJ381Pj10cYIlarqHKlvigB8pybNa7lkHusOZ+foahV3wTTFme3xnbJKrOT1v2ts3Sl5h8bR2hdZ+G7tYaH3JNi0hV4XfYh8Y6PMGTtEb5OBFxT8JRNtZl12VY4+mB/mLdIHgtZ44+em3a9d9fa2jeN74/23+VNVGCSWH3TlNsf1gpetqz06bNUjKbX/twt1u3AfnHGqofuMGziIjpncJWx3ybAFORTPn2H/akC+w=",
+      "contentHash": "348ea72f6b272fe3619f895745dd051c"
+    },
+    "app/trigger/sync.ts": {
+      "contents": "eJylVmGP0zgQ/d5f8VQhJUVdsqf71qocsFcEEtxxsBIfD68zSU1TO2c7u5Q2//1kJ2ncbHZBot9qz8x78/JmErErlbY4wDKzRY1Mqx2mL6wWeU76WUq3iUm3ye3v0+VEdLE52c9M00ZVhq6UlMStUHIO+ka8svRPRXo/d1HX7Kagv9iOzBxCGtL2T2bZW/mKWb4h0+MlrCwTVorE7CVPtKosTZdIErxMv1bGwm4ILXzJ7MaAGUjiZAzT+57YVSH49o2nVQiStgOIXnB34wkn3F9FQT+vRO459+G5UnlBF7xQVZrciPw/dx2mtPWZwQdlbK7JDBDL/Cz8pJJL+STVXVawbSDeKc90dxcm3UbLycTuS0Ivd4Oyut/qsW/jOCR1HINcTib0zfPjShoLJz1W3gjxYQKIdIEp2eKi1MopPZ1PAF3JBZgPjUu2LxRLF2ByP8PqOVwW2moHKJ0zKb6zxhuujTkKIbf/3nXNOFNY0pIV4ZmP4ZpSklawwgRRwSlqrNAyWE48cJLgrRTuVnwnnCo6Qm3LJiBoVKV5IMdiRGR2x4R9wO7xGPcxprNlgJqSsb+AOdRvqNWsl+KqUCO9Jwlek+UbWDeakG42G+e5EWs06aULiNvTKIcc+wGPh3oOH3ZA7QPpTOkd1tfvkCkNYh0hH+GO4gEqVBZQmLVW89Xeq1Rke8/fjymsQiYKSxo3+zMXtjntk2CWnVoJN9dIJ18+rd+tr67xFK8//v0eTw4nKjU+v1l/XJ/BYIXoySE8qaMvY15vnYGWxMiGjM/9Mu81mPsG7k/Ub5eXl5dt4boT/NrtkLxiOnXi8A3xLUTmJesNgg0ziEimEZRGxJ1/IuzIblTamCerZBPJmfT2CpzZbNVmFyzQ/IMwOIBk+scCsd8Qt0qkS/jSZ2eoT08U0GQrLf3GUFlb6hnJFKvVClFHIsLxOIjxdQdRnRKPj4XIEI80NXTCbBbQdDkt/jBuhG2Y6X5jKfHJEEANKgw9CjLW7g9hfNIZUCjQAzqcu/AhFc6jfkKD+wmPKzCI/5n+x1Ie7L413gGm4u6Nt4DVFc2xc98ZOS0QuY3Vvg7B1a4syFLahWdVUewj1K56PZ/Us+X/z8QmDw==",
+      "contentHash": "3a9fd9ead376853ae66dc3776aadfed9"
+    },
+    "trigger.config.ts": {
+      "contents": "eJxlkE9LxEAMxe/zKcKcFIqt7m324qKXBb15E5Gxkymz25mMaVqKS7+7tG79g5ck/PJeeCTETCxwAoc+JLyj5EMDE3imCPpWODQN8pXDoezcsRw2eqsUjovJobd9K3+sFycFkJkOWIsBPU+vYutjso4O70OdLdZ+HHtdKADuk4SIBnQihwtqqXnAAVsDuqXmS4XCATsD82kATPatRbdP9zgYEO6xWPg5zSoDiHbciWDM0hnYFCsN6SlEpF726bEzcF1VVfHj+Lf7XnpbC7GBmxWwTY5i+MDfKaa5LcUF7gw8a5tzeX6jfinUdLlVn+sPcn0=",
+      "contentHash": "6ac8077242acdb31e4506f101d27e52f"
+    },
+    "tsconfig.json": {
+      "contents": "eJxlUctOwzAQvOcrrD1GJTlxyQkJcaCiQuJaVciJl9TUL9mbElT135GduJBwsnZmPDu7eykYg85qJxX6V0fSmgANuxSMMQbEfY8EDQMM97CZQCVbaNgehNWwYfGpJKHnrcJYYzA4EhxmNVfKfm2jJ/kBZzCcpHuR7eMRu9OKIS87WmLGPmm5wjDsrBgUPhtCb92S1ImaYqcwC/wNg1VDnDQq2sEIhT5LfCTPuA3W7LLLH2cZrOKEYuJWU32GMTo6jwH9GbOlNJ1HjYa4WuqdGnqZ1r1PAJvXPg3NdZog5Z/ha3rzZh2n4++tGIOHukyHqeoSDkX+cI3yGEINAm+9ku8dmnMlKgo5alnW5f9yzHUVP9X07TDUKyl52ffoq86aD9lHopiTAo631mCswHc9L+9QXIsfn16wYw==",
+      "contentHash": "a3673a692cc69c4d4a4f3e9012fe5857"
+    },
+    "package.json": {
+      "contents": "eJyFVk2zoyoQ3d9fYWU9oKi5SWb1FvM7pqqDHcMVwQHMx5ua//5KRCS5ufN2wjm2Tffpg7/fsmzT4ICqQcUF2s337PdblmXZ5h8Y3bnIFd7chyV+sfmebX5WdEuLzbdA4hJNF0ge3tIdZQkseHfWo8WcS4HKeQ6j70kI7LUTWuUGgQecUVbR6hPDurvEJqGsQU7QoSEfNvcPE2VPC1quuB5Vg2YAd867u0V5J2tuMak18VbrViLhUo9NfhTtrxHN3fN29JDweuicHnkM+kBllCUp9qPIe3BoBEgPv1OWZGigETcyirkOpBEgdRvDsC95Rg+NvirSoxo9vaQF3X5FF1wr3yhG0/I9sSQc0edYPhTxiTXoQV/mYv9ktKDvXxEtN1pKAgbhRV2eySgx6KD828Gt1O7/ozkNdqGVSTA7DnAEi7m18wEKun0JhwcS5F3SekvryHNGtC0a2uAlt003USpaULZq190HtKu22Z6WtGSvYNLoPlJ2CwNGpweDJ3GbK80KWlMW+wtXS8KHp3K9H5JawE3o0OtkZLkEa8kFjADF0Q+2NsJ5xRZ0lxKX+SDORmXVK2xvi0TiO2ilmId8T+vD8z7hWp1ESya78HlV01kOC+lkoEdD5mFfpjwJ8mG1uuLR6Q49fEjFOc9faGW5W/MMg9mAAwKDiGplT4RBW9catGunk3PJkYsGyWpRBa3rxMR6zTvie1F5uE5TU6C0aII7FmtrYxnqSZpVuk3cGXvvxpsi1a3SfO41m2w4qkA3R77Ik8Z6DrN97B+ccjomtza0iJYr22hO3Bnc59NHiBi0juDNGeBOm8/MVOfVmvazvh8gfgYTBcYS6Vv8NaIU/2JwyyrpqlX6epLQYVS/vxBiWKuVmgemSC8kB0JehWpIj6bFeTZYvea/4KFCFU2uoQQjoMRk5XOAqaVvWfZn4m0U9H67vxMYBv/uZjDiMrOdGdFvWW7E4JLr9jgK6TUytT+bV+HDDV4iMD0vmgyT5vf9Yjm7A7Mi8yrmd0Fjw3gV0TinT/x4/RdgL63Jr3gcIChv/2C3qQHGI7y0wEen2qUxPK504wtXFg9/BzO4SplRFsGz6yWRGppwCW3T1PyLvsoTtp1s11fh7c9/nclaeA==",
+      "contentHash": "646233e98b297fc88a5853d267f54366"
+    }
+  },
+  "externals": [
+    {
+      "name": "import-in-the-middle",
+      "version": "1.11.0"
+    }
+  ],
+  "config": {
+    "project": "proj_tacknadojqvcpaecfxxu",
+    "dirs": [
+      "app/trigger"
+    ]
+  },
+  "outputPath": "/Users/jdbohrman/portcullis-app/.trigger/tmp/build-1SVJbC",
+  "runWorkerEntryPoint": "/Users/jdbohrman/portcullis-app/.trigger/tmp/build-1SVJbC/Library/pnpm/store/v3/tmp/dlx-42941/node_modules/.pnpm/trigger.dev@3.0.13/node_modules/trigger.dev/dist/esm/entryPoints/dev-run-worker.mjs",
+  "indexWorkerEntryPoint": "/Users/jdbohrman/portcullis-app/.trigger/tmp/build-1SVJbC/Library/pnpm/store/v3/tmp/dlx-42941/node_modules/.pnpm/trigger.dev@3.0.13/node_modules/trigger.dev/dist/esm/entryPoints/dev-index-worker.mjs",
+  "configPath": "/Users/jdbohrman/portcullis-app/.trigger/tmp/build-1SVJbC/portcullis-app/trigger.config.mjs",
+  "customConditions": [],
+  "deploy": {
+    "env": {}
+  },
+  "build": {},
+  "otelImportHook": {
+    "include": []
+  }
+}

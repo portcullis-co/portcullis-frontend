@@ -10,7 +10,7 @@ const isPublicRoute = createRouteMatcher([
   '/portal/(.*)',
   '/sign-up',
   '/sign-in',
-  '/import/(.*)',
+  '/syncs/(.*)',
   '/terms',
   '/api/(.*)',
   '/api/webhooks(.*)'
@@ -21,26 +21,24 @@ const allowedRoutes = [
   '/auth',
   '/api/(.*)',
   '/api/webhooks(.*)',
-  '/api/sources(.*)',
-  '/api/links(.*)',
-  '/api/sources',
-  '/api/import',
+  '/api/warehouses(.*)',
+  '/api/links/(.*)',
+  '/api/links',
+  '/api/warehouses',
+  '/api/syncs',
   '/api/check-connection',
-  '/import/(.*)',
+  '/syncs/(.*)',
   '/import/lDF3tpEADq',
-  '/sources',
+  '/warehouses',
   '/sign-in',
   '/sign-up',
-  '/api/import(.*)',
-  '/api/export(.*)',
+  '/api/syncs(.*)',
   '/portal/(.*)',
-  '/import/(.*)',
-  '/export/(.*)'
+  '/syncs/(.*)',
 ];
 
 const allowedOrigins = [
   'http://localhost:3000',
-  'http://localhost:8000',
 ];
 
 function corsMiddleware(request: NextRequest, response: NextResponse) {

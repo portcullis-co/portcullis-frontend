@@ -1,6 +1,16 @@
 import React from 'react';
 
-export function SourcesTable({ sources }) {
+interface Warehouse {
+  warehouseType: string;
+  status: string;
+  // Add more properties as needed
+}
+
+interface WarehousesTableProps {
+  warehouses: Warehouse[];
+}
+
+export function WarehousesTable({ warehouses }: WarehousesTableProps) {
   return (
     <table>
       <thead>
@@ -11,10 +21,10 @@ export function SourcesTable({ sources }) {
         </tr>
       </thead>
       <tbody>
-        {sources.map((source, index) => (
+        {warehouses.map((warehouse: { warehouseType: string; status: string }, index: number) => (
           <tr key={index}>
-            <td>{source.warehouseType}</td>
-            <td>{source.status}</td>
+            <td>{warehouse.warehouseType}</td>
+            <td>{warehouse.status}</td>
             {/* Add more table cells as needed */}
           </tr>
         ))}

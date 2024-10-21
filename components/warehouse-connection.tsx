@@ -42,10 +42,8 @@ interface LinkDetails {
   type: string;
   logo: string;
   redirect_url: string;
-  source: string;
+  internal_warehouse: string;
   organization: string;
-  export_id: string;
-  import_id: string;
 }
 
 interface Destination {
@@ -105,60 +103,56 @@ export default function WarehouseConnection({ token, onClose }: WarehouseConnect
   const appLogoRef = useRef<HTMLDivElement>(null)
   const destLogoRef = useRef<HTMLDivElement>(null)
 
-  const runPipeline = async (organization: string, destination: string, datasetName: string) => {
+  const runPipeline = async (organization: string, destination: string ) => {
     const supabase = createClient();
-    const source = linkDetails?.source;
+    const internal_warehouse = linkDetails?.internal_warehouse;
   
-    if (!source) {
-      console.error('Source is undefined');
-      throw new Error('Source is undefined. Cannot fetch credentials.');
+    if (!internal_warehouse) {
+      console.error('Internal warehouse is undefined');
+      throw new Error('Internal warehouse is undefined. Cannot fetch credentials.');
     }
   
-    console.log('Source value:', source);
+    console.log('Internal warehouse value:', internal_warehouse);
   
-    console.log('Fetching credentials for source:', source);
-    console.log('Querying for source ID:', source);
+    console.log('Fetching credentials for internal warehouse:', internal_warehouse);
+    console.log('Querying for warehouse ID:', internal_warehouse);
 
     const { data: credentialsData, error: credentialsError } = await supabase
-      .from('sources')
+      .from('warehouses')
       .select('*')
-      .eq('id', source)
+      .eq('id', internal_warehouse)
       .maybeSingle();
 
     console.log('Query result:', { data: credentialsData, error: credentialsError });
   
     if (credentialsError) {
-      console.error('Error fetching source:', credentialsError);
-      throw new Error(`Failed to fetch source: ${credentialsError.message}`);
+      console.error('Error fetching warehouse:', credentialsError);
+      throw new Error(`Failed to fetch warehouse: ${credentialsError.message}`);
     }
   
     if (!credentialsData) {
-      console.error('No data found for source ID:', source);
-      throw new Error(`No data found for source ID: ${source}`);
+      console.error('No data found for warehouse ID:', internal_warehouse);
+      throw new Error(`No data found for warehouse ID: ${internal_warehouse}`);
     }
   
     if (!credentialsData.credentials) {
-      console.error('Credentials are missing in the source data');
-      throw new Error('Credentials are missing in the source data');
+      console.error('Credentials are missing in the warehouse data');
+      throw new Error('Credentials are missing in the warehouse data');
     }
   
     const requestBody = {
       organization: linkDetails?.organization,
-      source: source,
+      internal_warehouse: internal_warehouse,
       type: linkDetails?.type,
-      import_warehouse: selectedWarehouse?.name,
-      source_warehouse: credentialsData?.type ? credentialsData.type.charAt(0).toUpperCase() + credentialsData.type.slice(1) : undefined,
-      export_id: linkDetails?.export_id,
-      import_id: linkDetails?.import_id,
-      dataset_name: datasetName,
+      link_warehouse: credentialsData?.type ? credentialsData.type.charAt(0).toUpperCase() + credentialsData.type.slice(1) : undefined,
+      internal_type: selectedWarehouse?.name,
       link_credentials: credentials,
-      source_credentials: credentialsData.credentials,
-      destination: destination
+      internal_credentials: credentialsData.credentials,
     };
   
     console.log('Sending request to pipeline API:', JSON.stringify(requestBody, null, 2));
   
-    const response = await fetch('http://localhost:8000/transfer', {
+    const response = await fetch('/api/sync', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -184,12 +178,12 @@ export default function WarehouseConnection({ token, onClose }: WarehouseConnect
     const supabase = createClient();
     const { data, error } = await supabase
       .from('links')
-      .select('type, import_id, logo, export_id, redirect_url, organization, source')
+      .select('type, logo, redirect_url, organization, internal_warehouse')
       .eq('invite_token', token)
       .single();
   
     if (error) {
-      console.error('Error fetching source details:', error);
+      console.error('Error fetching warehouse details:', error);
       return null;
     }
   
@@ -202,10 +196,8 @@ export default function WarehouseConnection({ token, onClose }: WarehouseConnect
   
     const details: LinkDetails = {
       type: data.type ?? '',
-      import_id: data.import_id,
-      source: data.source,
+      internal_warehouse: data.internal_warehouse,
       organization: data.organization,
-      export_id: data.export_id,
       logo: data.logo,
       redirect_url: data.redirect_url,
     };
@@ -220,9 +212,9 @@ export default function WarehouseConnection({ token, onClose }: WarehouseConnect
     setWarehouses([
       { id: '1', name: 'Clickhouse', logo: 'https://cdn.brandfetch.io/idnezyZEJm/w/400/h/400/theme/dark/icon.jpeg?k=bfHSJFAPEG', connected: false },
       { id: '2', name: 'Snowflake', logo: 'https://cdn.brandfetch.io/idJz-fGD_q/theme/dark/symbol.svg?k=bfHSJFAPEG', connected: false },
-      { id: '3', name: 'BigQuery', logo: '/placeholder.svg?height=40&width=40&text=BQ', connected: false },
-      { id: '4', name: 'Databricks', logo: '/placeholder.svg?height=40&width=40&text=DB', connected: false },
-      { id: '5', name: 'Postgres', logo: '/placeholder.svg?height=40&width=40&text=PG', connected: false },
+      { id: '3', name: 'BigQuery', logo: 'https://cdn.worldvectorlogo.com/logos/google-bigquery-logo-1.svg', connected: false },
+      { id: '4', name: 'Redshift (Coming Soon)', logo: 'https://cdn.worldvectorlogo.com/logos/aws-2.svg', connected: false },
+      { id: '5', name: 'Postgres', logo: 'https://cdn.worldvectorlogo.com/logos/postgresql.svg', connected: false },
     ])
     const getLinkDetails = async () => {
       console.log('getLinkDetails called. Token:', token);
@@ -276,29 +268,17 @@ export default function WarehouseConnection({ token, onClose }: WarehouseConnect
         }
   
         // Validate credentials
-        const requiredFields: Array<'password' | 'host' | 'database' | 'user' | 'username'> = ['password', 'host', 'database'];
+        const requiredFields: Array<'password' | 'host' | 'database' | 'username'> = ['password', 'host', 'database'];
 
-        if (selectedWarehouse.name === 'Clickhouse') {
-          requiredFields.push('user');
-        } else {
-          requiredFields.push('username');
-        }
         const missingFields = requiredFields.filter(field => !credentials[field]);
         if (missingFields.length > 0) {
           throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
         }
   
-        // Run the pipeline
-        console.log('Running pipeline with:', {
-          organization: linkDetails.organization,
-          destination: selectedWarehouse.name,
-          datasetName: `${linkDetails.organization}-${linkDetails.source}-dataset`
-        });
   
         const result = await runPipeline(
           linkDetails.organization,
           selectedWarehouse.name,
-          `${linkDetails.organization}-${linkDetails.source}-dataset`
         );
         console.log('Pipeline execution result:', result);
         
@@ -336,38 +316,38 @@ export default function WarehouseConnection({ token, onClose }: WarehouseConnect
 
   const renderHeader = () => (
     <div className="relative flex items-center justify-between mb-6" ref={containerRef}>
+      <Circle ref={linkLogoRef}>
+        {linkDetails?.logo ? (
+          <Image
+            src={linkDetails?.logo}  // Updated to use linkDetails.logo
+            alt="Customer"
+            width={40}
+            height={40}
+            className="w-10 h-10"
+            onError={(e) => {
+              console.error('Image failed to load:', linkDetails?.logo);
+              e.currentTarget.src = "https://img.clerk.com/eyJ0eXBlIjoiZGVmYXVsdCIsImlpZCI6Imluc18ybXRTd1VrSnY3djVFUTJhdnlXd3NkWVlhVVoiLCJyaWQiOiJvcmdfMm11TkVlQktkVml0N01FOEJUcVUzRXRZaFZWIiwiaW5pdGlhbHMiOiJUIn0";
+            }}
+          />
+        ) : (
+          <Image 
+            src="https://img.clerk.com/eyJ0eXBlIjoiZGVmYXVsdCIsImlpZCI6Imluc18ybXRTd1VrSnY3djVFUTJhdnlXd3NkWVlhVVoiLCJyaWQiOiJvcmdfMm11TkVlQktkVml0N01FOEJUcVUzRXRZaFZWIiwiaW5pdGlhbHMiOiJUIn0" 
+            alt="Customer" 
+            width={40}
+            height={40}
+            className="w-10 h-10" 
+          />
+        )}
+      </Circle>
+      <Circle ref={appLogoRef}>
+        <Logo width={40} height={40} />
+      </Circle>
       <Circle ref={destLogoRef}>
         {selectedWarehouse ? (
           <img src={selectedWarehouse.logo} alt={selectedWarehouse.name} className="w-10 h-10" />
         ) : (
           <Database className="w-10 h-10 text-gray-400" />
         )}
-      </Circle>
-      <Circle ref={appLogoRef}>
-        <Logo width={40} height={40} />
-      </Circle>
-      <Circle ref={linkLogoRef}>
-      {linkDetails?.logo ? (
-        <Image
-          src={linkDetails?.logo ?? "/placeholder.svg?height=40&width=40&text=CUST"}
-          alt="Customer"
-          width={40}
-          height={40}
-          className="w-10 h-10"
-          onError={(e) => {
-            console.error('Image failed to load:', linkDetails?.logo);
-            e.currentTarget.src = "/placeholder.svg?height=40&width=40&text=CUST";
-          }}
-        />
-      ) : (
-        <Image 
-          src="/placeholder.svg?height=40&width=40&text=CUST" 
-          alt="Customer" 
-          width={40}
-          height={40}
-          className="w-10 h-10" 
-        />
-      )}
       </Circle>
       <AnimatedBeam
         containerRef={containerRef}

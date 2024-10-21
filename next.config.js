@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {
-    domains: ['img.logo.dev', 'img.clerk.com', 'cdn.brandfetch.io'],
+    domains: ['img.logo.dev', 'img.clerk.com', 'cdn.brandfetch.io', 'cdn.worldvectorlogo.com'],
   },
   reactStrictMode: true,
   swcMinify: true,

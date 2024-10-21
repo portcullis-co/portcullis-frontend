@@ -1,22 +1,26 @@
 import { NextResponse } from 'next/server';
 import { nanoid } from 'nanoid';
 import { createClient } from '@/lib/supabase/server';
-import { clerkClient } from '@clerk/nextjs/server';
 import { auth } from '@clerk/nextjs/server';
 
 export async function POST(request: Request) {
   try {
     const supabase = createClient();
     const { userId, orgId } = auth();
-    const { type, logo, redirectUrl, source } = await request.json();
+    const { type, logo, redirectUrl, internal_warehouse } = await request.json();
 
     const invite_token = nanoid(10);
 
     const { data, error } = await supabase
       .from('links')
-      .insert({ invite_token, source, type, logo, redirect_url: redirectUrl, organization: orgId, stakeholder: userId })
-      .select()
-      .single();
+      .insert({ 
+        invite_token: invite_token, 
+        internal_warehouse: internal_warehouse, 
+        type: type, 
+        logo: logo, 
+        redirect_url: redirectUrl, 
+        organization: orgId // This will now work with Clerk's organization ID format
+      })
 
     if (error) {
       console.error('Supabase error:', error);
