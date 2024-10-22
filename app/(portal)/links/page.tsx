@@ -10,7 +10,6 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { Toaster } from "@/components/ui/toaster"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@clerk/nextjs"
-import internal from 'stream';
 
 type Link = {
   id: string;
@@ -20,13 +19,13 @@ type Link = {
   redirectUrl: string;
   invite_token: string;
   internal_warehouse: string;
-  internal_type: string;
 };
-async function createInviteLink(imageUrl: string, redirectUrl: string, internal_warehouse: string, internal_type: string): Promise<Link> {
+
+async function createInviteLink(imageUrl: string, redirectUrl: string, internal_warehouse: string,): Promise<Link> {
   const response = await fetch('/api/links', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ logo: imageUrl, redirectUrl, internal_warehouse, internal_type }),
+    body: JSON.stringify({ logo: imageUrl, redirectUrl, internal_warehouse,}),
   });
   if (!response.ok) {
     const errorData = await response.json();
@@ -40,11 +39,6 @@ async function fetchInviteLinks() {
   if (!response.ok) throw new Error('Failed to fetch invite links');
   return response.json();
 }
-
-const capitalizeFirstLetter = (string: string) => {
-  if (!string) return ''; // Add this line to handle undefined or empty strings
-  return string.charAt(0).toUpperCase() + string.slice(1).toLowerCase();
-};
 
 const formatDate = (dateString: string) => {
   const date = new Date(dateString);
@@ -70,13 +64,13 @@ export default function InviteLinks() {
   const { organization } = useOrganization();
   const organizationId = organization?.id;
   const [links, setLinks] = useState<Link[]>([]);
-  const [warehouses, setWarehouses] = useState<Array<{ id: string; internal_type: string; created_at: string }>>([]);
+  const [warehouses, setWarehouses] = useState<Array<{ id: string; created_at: string }>>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [redirectUrl, setRedirectUrl] = useState('');
   const [selectedWarehouseId, setSelectedWarehouseId] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const imageUrl = useOrganization().organization?.imageUrl;
-  const { toast } = useToast() // Add this line
+  const { toast } = useToast()
 
   useEffect(() => {
     loadLinks();
@@ -89,8 +83,7 @@ export default function InviteLinks() {
     setIsLoading(true);
     try {
       const fetchedLinks = await fetchInviteLinks();
-      console.log('Fetched links:', fetchedLinks); // Log the fetched links
-      setLinks(fetchedLinks.filter((link: any) => link !== null)); // Filter out any null links
+      setLinks(fetchedLinks.filter((link: any) => link !== null));
     } catch (error) {
       console.error('Error fetching links:', error);
       showToast('Failed to load invite links', 'error');
@@ -106,8 +99,6 @@ export default function InviteLinks() {
     }
     try {
       const response = await fetchWarehouses(organizationId);
-      console.log('Fetched warehouse data:', response); // Log the entire response
-
       if (response && Array.isArray(response.warehouses)) {
         setWarehouses(response.warehouses);
       } else {
@@ -125,10 +116,7 @@ export default function InviteLinks() {
   const handleCreateLink = async () => {
     setIsLoading(true);
     try {
-      console.log('Selected Warehouse ID:', selectedWarehouseId);
-      const selectedWarehouse = warehouses.find(warehouse => warehouse.id === selectedWarehouseId);
-      const type = selectedWarehouse ? selectedWarehouse.internal_type : ''; 
-      const newLink = await createInviteLink(imageUrl || '', redirectUrl, selectedWarehouseId, type);
+      const newLink = await createInviteLink(imageUrl || '', redirectUrl, selectedWarehouseId);
       
       if (newLink && newLink.invite_token) {
         const copyableLink = `${window.location.origin}/invite/${newLink.invite_token}`;
@@ -180,15 +168,15 @@ export default function InviteLinks() {
             <DialogTitle>Create New Invite Link</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-          <Select value={selectedWarehouseId} onValueChange={setSelectedWarehouseId}>
+            <Select value={selectedWarehouseId} onValueChange={setSelectedWarehouseId}>
               <SelectTrigger>
                 <SelectValue placeholder="Select a warehouse" />
               </SelectTrigger>
               <SelectContent>
                 {warehouses.length > 0 ? (
-                  warehouses.map((warehouse: { id: string; internal_type: string; created_at: string }) => (
+                  warehouses.map((warehouse) => (
                     <SelectItem key={warehouse.id} value={warehouse.id}>
-                      {`${capitalizeFirstLetter(warehouse.internal_type)} - ${formatDate(warehouse.created_at)}`}
+                      {formatDate(warehouse.created_at)}
                     </SelectItem>
                   ))
                 ) : (
@@ -211,31 +199,31 @@ export default function InviteLinks() {
         <TableHeader>
           <TableRow>
             <TableHead>Invite Link</TableHead>
-            <TableHead>Type</TableHead>
+            <TableHead>Created</TableHead>
             <TableHead>Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-        {links.map((row) => row && (
-          <TableRow key={row.id}>
-            <TableCell>
-              <CopyLinkInput link={`${window.location.origin}/invite/${row.invite_token}`} /> {/* Use invite_token for the link */}
-            </TableCell>
-            <TableCell>{row.internal_type}</TableCell>
-            <TableCell>
-              <Button 
-                onClick={() => handleDeleteLink(row.id)} 
-                variant="destructive"
-                disabled={isLoading}
-              >
-                Delete
-              </Button>
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
+          {links.map((row) => row && (
+            <TableRow key={row.id}>
+              <TableCell>
+                <CopyLinkInput link={`${window.location.origin}/invite/${row.invite_token}`} />
+              </TableCell>
+              <TableCell>{formatDate(row.createdAt)}</TableCell>
+              <TableCell>
+                <Button 
+                  onClick={() => handleDeleteLink(row.id)} 
+                  variant="destructive"
+                  disabled={isLoading}
+                >
+                  Delete
+                </Button>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
       </Table>
-        <Toaster />
+      <Toaster />
     </div>
   );
 }
