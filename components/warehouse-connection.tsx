@@ -54,7 +54,6 @@ import { DropdownMenu } from './ui/dropdown-menu'
   }
 
   interface LinkDetails {
-    internal_type: string;
     logo: string;
     redirect_url: string;
     internal_warehouse: string;
@@ -125,7 +124,7 @@ import { DropdownMenu } from './ui/dropdown-menu'
     const appLogoRef = useRef<HTMLDivElement>(null)
     const destLogoRef = useRef<HTMLDivElement>(null)
 
-    const runPipeline = async (organization: string, destination: string ) => {
+    const runPipeline = async (organization: string, destination: string) => {
       const supabase = createClient();
       const internal_warehouse = linkDetails?.internal_warehouse;
     
@@ -134,42 +133,74 @@ import { DropdownMenu } from './ui/dropdown-menu'
         throw new Error('Internal warehouse is undefined. Cannot fetch credentials.');
       }
     
-      console.log('Internal warehouse value:', internal_warehouse);
-    
-      console.log('Fetching credentials for internal warehouse:', internal_warehouse);
-      console.log('Querying for warehouse ID:', internal_warehouse);
-
-      const { data: credentialsData, error: credentialsError } = await supabase
+      const { data: internalData, error: internalError } = await supabase
         .from('warehouses')
         .select('*')
         .eq('id', internal_warehouse)
         .maybeSingle();
-
-      if (credentialsError) {
-        console.error('Error fetching warehouse:', credentialsError);
-        throw new Error(`Failed to fetch warehouse: ${credentialsError.message}`);
+    
+      if (internalError) {
+        console.error('Error fetching warehouse:', internalError);
+        throw new Error(`Failed to fetch warehouse: ${internalError.message}`);
       }
     
-      if (!credentialsData) {
+      if (!internalData) {
         console.error('No data found for warehouse ID:', internal_warehouse);
         throw new Error(`No data found for warehouse ID: ${internal_warehouse}`);
       }
     
-      if (!credentialsData.credentials) {
+      if (!internalData.credentials) {
         console.error('Credentials are missing in the warehouse data');
         throw new Error('Credentials are missing in the warehouse data');
       }
+    
+      // Format credentials based on warehouse type
+      const getFormattedCredentials = () => {
+        switch (selectedWarehouse?.name) {
+          case 'Clickhouse':
+            return {
+              username: credentials.username,
+              password: credentials.password,
+              host: credentials.host,
+              database: credentials.database,
+              // Only include port if it's provided
+            };
+          case 'Snowflake':
+            return {
+              username: credentials.username,
+              password: credentials.password,
+              account: credentials.account,
+              database: credentials.database,
+              schema: credentials.schema,
+              warehouse: credentials.warehouse,
+            };
+          case 'BigQuery':
+            return {
+              projectId: credentials.projectId,
+              keyFilename: credentials.keyFilename,
+            };
+          case 'Postgres':
+            return {
+              username: credentials.username,
+              password: credentials.password,
+              host: credentials.host,
+              port: parseInt(credentials.port, 10),
+              database: credentials.database,
+            };
+          default:
+            throw new Error(`Unsupported warehouse type: ${selectedWarehouse?.name}`);
+        }
+      };
+    
     
       const requestBody = {
         organization: linkDetails?.organization,
         internal_warehouse: internal_warehouse,
         link_type: selectedWarehouse?.name,
-        internal_type: linkDetails?.internal_type,
         link_credentials: credentials,
-        internal_credentials: credentialsData.credentials,
+        internal_credentials: internalData.credentials,
+        table_name: internalData.table_name,
       };
-      console.log(selectedWarehouse?.name)
-      // Map warehouse types to their respective sync routes
     
       console.log('Sending request to pipeline API:', JSON.stringify(requestBody, null, 2));
     
@@ -199,7 +230,7 @@ import { DropdownMenu } from './ui/dropdown-menu'
       const supabase = createClient();
       const { data, error } = await supabase
           .from('links')
-          .select('internal_type, logo, redirect_url, organization, internal_warehouse')
+          .select('logo, redirect_url, organization, internal_warehouse')
           .eq('invite_token', token)
           .single();
 
@@ -216,7 +247,6 @@ import { DropdownMenu } from './ui/dropdown-menu'
       }
 
       const details: LinkDetails = {
-          internal_type: data.internal_type ?? '',
           internal_warehouse: data.internal_warehouse,
           organization: data.organization,
           logo: data.logo,
@@ -396,9 +426,9 @@ import { DropdownMenu } from './ui/dropdown-menu'
           return (
             <>
             <Input
-              placeholder="Host"
-              value={credentials.host ?? ''}
-              onChange={(e) => setCredentials({ ...credentials, host: e.target.value })}
+              placeholder="Account"
+              value={credentials.account ?? ''}
+              onChange={(e) => setCredentials({ ...credentials, account: e.target.value })}
             />
               <Input 
                 placeholder="Database"
