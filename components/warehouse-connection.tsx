@@ -17,6 +17,7 @@
   import { DataWarehouseForm } from "@/components/data-warehouse-form"; // Import the DataWarehouseForm
   import { toast, useToast } from '@/hooks/use-toast'
   import { Toaster } from './ui/toaster'
+import { DropdownMenu } from './ui/dropdown-menu'
 
   interface Warehouse {
     id: string
@@ -32,10 +33,12 @@
     host: string; // Change from 'string | null' to 'string'
     url: string; // Change from 'string | null' to 'string'
     database: string;
+    port: string;
     account: string;
     application: string;
     proxyHost: string;
     schema: string;
+    protocol: string;
     accessUrl: string;
     authenticator: string;
     warehouse: string;
@@ -101,8 +104,10 @@
       username: "",
       password: "",
       account: "",
+      port: "",
       host: "",
       url: "",
+      protocol: "",
       database: "",
       application: "",
       proxyHost: "",
@@ -297,7 +302,7 @@
             requiredFields = ['username', 'password', 'host', 'database'];
             break;
           case 'Snowflake':
-            requiredFields = ['account', 'username', 'password', 'warehouse', 'database', 'schema'];
+            requiredFields = ['username', 'password', 'database', 'schema'];
             break;
           default:
             throw new Error('Unsupported warehouse type');
@@ -319,7 +324,7 @@
 
         // Additional validation for Snowflake account
         if (selectedWarehouse.name === 'Snowflake' && credentials.account) {
-          if (credentials.account.includes('.')) {
+          if (credentials.account.includes('.snowflakecomputing.com')) {
             throw new Error('Please enter only your account identifier without the snowflakecomputing.com domain');
           }
         }
@@ -365,6 +370,11 @@
           return (
             <>
               <Input 
+                placeholder="Host"
+                value={credentials.host ?? ''}
+                onChange={(e) => setCredentials({...credentials, host: e.target.value})}
+              />
+              <Input 
                 placeholder="Username"
                 value={credentials.username ?? ''}
                 onChange={(e) => setCredentials({...credentials, username: e.target.value})}
@@ -374,11 +384,6 @@
                 placeholder="Password"
                 value={credentials.password ?? ''}
                 onChange={(e) => setCredentials({...credentials, password: e.target.value})}
-              />
-              <Input 
-                placeholder="Url (e.g., https://your-host.com)"
-                value={credentials.url ?? ''}
-                onChange={handleHostChange}
               />
               <Input 
                 placeholder="Database Name"
@@ -390,27 +395,11 @@
         case 'Snowflake':
           return (
             <>
-              <Input 
-                placeholder="Account Name"
-                value={credentials.account ?? ''}
-                onChange={(e) => setCredentials({...credentials, account: e.target.value})}
-              />
-              <Input 
-                type="password" 
-                placeholder="Password"
-                value={credentials.password ?? ''}
-                onChange={(e) => setCredentials({...credentials, password: e.target.value})}
-              />
-              <Input 
-                placeholder="Username"
-                value={credentials.username ?? ''}
-                onChange={(e) => setCredentials({...credentials, username: e.target.value})}
-              />
-              <Input 
-                placeholder="Warehouse"
-                value={credentials.warehouse ?? ''}
-                onChange={(e) => setCredentials({...credentials, warehouse: e.target.value})}
-              />
+            <Input
+              placeholder="Host"
+              value={credentials.host ?? ''}
+              onChange={(e) => setCredentials({ ...credentials, host: e.target.value })}
+            />
               <Input 
                 placeholder="Database"
                 value={credentials.database ?? ''}
@@ -421,8 +410,91 @@
                 value={credentials.schema ?? ''}
                 onChange={(e) => setCredentials({...credentials, schema: e.target.value})}
               />
+              <Input 
+                placeholder="Username"
+                value={credentials.username ?? ''}
+                onChange={(e) => setCredentials({...credentials, username: e.target.value})}
+              />
+              <Input 
+                placeholder="Password"
+                type="password" 
+                value={credentials.password ?? ''}
+                onChange={(e) => setCredentials({...credentials, password: e.target.value})}
+              />
             </>
           );
+          case 'Postgres':
+            return (
+              <>
+                <Input 
+                  placeholder="Host"
+                  value={credentials.host ?? ''}
+                  onChange={(e) => setCredentials({...credentials, account: e.target.value})}
+                />
+                <Input 
+                  type="Port" 
+                  placeholder="Port"
+                  value={credentials.port ?? ''}
+                  onChange={(e) => setCredentials({...credentials, port: e.target.value})}
+                />
+                <Input 
+                  placeholder="Database"
+                  value={credentials.database ?? ''}
+                  onChange={(e) => setCredentials({...credentials, database: e.target.value})}
+                />
+                <Input 
+                  placeholder="Schema"
+                  value={credentials.schema ?? ''}
+                  onChange={(e) => setCredentials({...credentials, schema: e.target.value})}
+                />
+                <Input 
+                  placeholder="Username"
+                  value={credentials.username ?? ''}
+                  onChange={(e) => setCredentials({...credentials, username: e.target.value})}
+                />
+                <Input 
+                  placeholder="Password"
+                  value={credentials.password ?? ''}
+                  onChange={(e) => setCredentials({...credentials, password: e.target.value})}
+                />
+              </>
+            );
+            case 'MySQL':
+              return (
+                <>
+                  <Input 
+                    placeholder="Host"
+                    value={credentials.host ?? ''}
+                    onChange={(e) => setCredentials({...credentials, account: e.target.value})}
+                  />
+                  <Input 
+                    type="Port" 
+                    placeholder="Port"
+                    value={credentials.port ?? ''}
+                    onChange={(e) => setCredentials({...credentials, port: e.target.value})}
+                  />
+                  <Input 
+                    placeholder="Database"
+                    value={credentials.database ?? ''}
+                    onChange={(e) => setCredentials({...credentials, database: e.target.value})}
+                  />
+                  <Input 
+                    placeholder="Schema"
+                    value={credentials.schema ?? ''}
+                    onChange={(e) => setCredentials({...credentials, schema: e.target.value})}
+                  />
+                  <Input 
+                    placeholder="Username"
+                    value={credentials.username ?? ''}
+                    onChange={(e) => setCredentials({...credentials, username: e.target.value})}
+                  />
+                  <Input 
+                    placeholder="Password"
+                    value={credentials.password ?? ''}
+                    onChange={(e) => setCredentials({...credentials, password: e.target.value})}
+                  />
+                </>
+              );
         default:
           return (
             <p>Configuration for {selectedWarehouse.name} is not available at the moment.</p>
@@ -484,11 +556,6 @@
         />
       </div>
     )
-
-    const handleHostChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const newValue = e.target.value; // No need to set to null, just leave it as is
-      setCredentials({ ...credentials, host: newValue });
-    };    
 
     const renderStep = () => {
       switch (step) {

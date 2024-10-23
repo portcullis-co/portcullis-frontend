@@ -25,7 +25,6 @@ interface Warehouse {
 
 interface ClickhouseCredentials {
   host: string;
-  port: string;
   database: string;
   username: string;
   password: string;
@@ -39,7 +38,6 @@ export default function InternalWarehouseListPage() {
   const [newWarehouse, setNewWarehouse] = useState<{ credentials: ClickhouseCredentials }>({
     credentials: {
       host: '',
-      port: '',
       database: '',
       username: '',
       password: '',
@@ -141,7 +139,6 @@ export default function InternalWarehouseListPage() {
       setNewWarehouse({
         credentials: {
           host: '',
-          port: '',
           database: '',
           username: '',
           password: '',
@@ -199,7 +196,7 @@ export default function InternalWarehouseListPage() {
                   </Label>
                   <Input
                     id={field}
-                    placeholder={field === 'port' ? '8123' : ''}
+                    placeholder={field}
                     type={field === 'password' ? 'password' : 'text'}
                     className="col-span-3"
                     value={newWarehouse.credentials[field as keyof ClickhouseCredentials]}

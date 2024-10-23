@@ -40,11 +40,6 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Type and credentials are required' }, { status: 400 });
       }
   
-      // Validate credentials
-      if (!validateCredentials(internal_type, credentials)) {
-        return NextResponse.json({ error: 'Invalid credentials for the selected type' }, { status: 400 });
-      }
-  
       const { data, error } = await supabase
         .from('warehouses')
         .insert({ internal_type, credentials, organization: orgId, slug  })
@@ -61,21 +56,6 @@ export async function POST(request: Request) {
       console.error('Unexpected error:', error);
       return NextResponse.json({ error: 'An unexpected error occurred' }, { status: 500 });
     }
-  }
-  
-  // Make sure this function is defined in the same file
-  function validateCredentials(type: string, credentials: any): boolean {
-    const requiredFields: { [key: string]: string[] } = {
-      snowflake: ['account', 'username', 'password', 'warehouse', 'database', 'schema'],
-      bigquery: ['project_id', 'private_key', 'client_email'],
-      redshift: ['host', 'port', 'database', 'user', 'password'],
-      clickhouse: ['url', 'port', 'database', 'username', 'password'],
-    };
-  
-    const fields = requiredFields[type];
-    if (!fields) return false;
-    console.log('Credentials:', credentials);
-    return fields.every(field => credentials[field] && credentials[field].trim() !== '');
   }
 
 export async function DELETE(request: Request) {

@@ -1,0 +1,6 @@
+# Pulumi.yaml provider configuration file
+name: bulker-config
+runtime: nodejs
+config:
+    docker:host:
+        value: unix:///var/run/docker.sock
