@@ -40,6 +40,16 @@ export function getSnowflakeDataType(clickhouseType: string): string {
         return 'VARCHAR';
     }
 
+    // Handle Decimal types with precision and scale
+    if (type.startsWith('Decimal')) {
+        const match = type.match(/Decimal\((\d+),\s*(\d+)\)/);
+        if (match) {
+            const [, precision, scale] = match;
+            return `NUMBER(${precision},${scale})`;
+        }
+        return 'NUMBER(38,6)'; // Default if no precision/scale specified
+    }
+
     // Main type conversion switch
     switch (type) {
         case 'UInt8':
@@ -115,8 +125,32 @@ export function getSnowflakeDataType(clickhouseType: string): string {
  */
 export function convertClickhouseToSnowflake(clickhouseType: string, value: any): any {
     // Handle null values early
+    console.log(`Converting: type=${clickhouseType}, value=${value}`);
     if (value === null || value === undefined) {
         return null;
+    }
+
+    // If value is an object with a 'text' property, use that
+    if (typeof value === 'object' && value !== null && 'text' in value) {
+        console.log('Value is an object with text property, using text value');
+        value = value.text;
+    }
+
+    // Handle Nullable types
+    if (clickhouseType.startsWith('Nullable(')) {
+        const innerType = clickhouseType.slice(9, -1);
+        console.log(`Handling Nullable type, inner type: ${innerType}`);
+        return convertClickhouseToSnowflake(innerType, value);
+    }
+
+    // Handle LowCardinality types
+    if (clickhouseType.startsWith('LowCardinality(')) {
+        const innerType = clickhouseType.slice(15, -1);
+        return convertClickhouseToSnowflake(innerType, value);
+    }
+
+    if (clickhouseType.startsWith('Enum8(') || clickhouseType.startsWith('Enum16(') || clickhouseType === 'Enum8' || clickhouseType === 'Enum16') {
+        return value === '' ? null : String(value);
     }
 
     // Guard against undefined or null type
@@ -126,25 +160,9 @@ export function convertClickhouseToSnowflake(clickhouseType: string, value: any)
     }
 
     // Ensure we're working with a string type
-    const type = String(clickhouseType).trim();
+    const type = String(clickhouseType).replace(/^Nullable\((.+)\)$/, '$1').trim();
 
     try {
-        // Handle Nullable types
-        if (type.startsWith('Nullable(')) {
-            const innerType = type.slice(9, -1);
-            return convertClickhouseToSnowflake(innerType, value);
-        }
-
-        // Handle LowCardinality types
-        if (type.startsWith('LowCardinality(')) {
-            const innerType = type.slice(15, -1);
-            return convertClickhouseToSnowflake(innerType, value);
-        }
-
-        // Handle Enum types
-        if (type.startsWith('Enum8(') || type.startsWith('Enum16(') || type === 'Enum8' || type === 'Enum16') {
-            return String(value);
-        }
 
         switch (type) {
             case 'UInt8':
@@ -155,50 +173,68 @@ export function convertClickhouseToSnowflake(clickhouseType: string, value: any)
             case 'Int16':
             case 'Int32':
             case 'Int64':
-                return value === '' ? null : Number(value);
-
+                const numValue = value === '' ? null : Number(value);
+                console.log(`Converting to number: ${numValue}`);
+                return numValue === null || isNaN(numValue) ? null : numValue;
             case 'Float32':
-            case 'Float64':
-            case 'Decimal':
-                return value === '' ? null : parseFloat(value);
+                case 'Float64':
+                    const floatValue = value === '' ? null : Number(value);
+                    return floatValue === null || isNaN(floatValue) ? null : floatValue;
+                case 'Decimal':
+                    const decimalValue = value === '' ? null : parseFloat(value);
+                    return decimalValue === null || isNaN(decimalValue) ? null : decimalValue;
 
             case 'String':
             case 'FixedString':
-                return String(value);
+                return value === null ? null : String(value);
 
             case 'Date':
             case 'Date32':
+                if (value === '') return null;
+                return new Date(value).toISOString().split('T')[0];
             case 'DateTime':
-            case 'DateTime64':
-                return value ? new Date(value) : null;
-
+                case 'DateTime64':
+                    if (value === '') return null;
+                    try {
+                        const date = new Date(value);
+                        if (isNaN(date.getTime())) {
+                            console.warn(`Invalid DateTime value: ${value}, returning null`);
+                            return null;
+                        }
+                        return date.toISOString().replace('T', ' ').split('.')[0];
+                    } catch (error) {
+                        console.warn(`Error converting DateTime value: ${value}, returning null`);
+                        return null;
+                    }
             case 'Bool':
-                return Boolean(value);
-
+                return value === '' ? null : Boolean(value);
             case 'UUID':
             case 'IPv4':
             case 'IPv6':
-                return String(value);
-
+                return value === '' ? null : String(value);
             case 'Array':
-                if (Array.isArray(value)) return value;
-                try {
-                    return JSON.parse(value);
-                } catch {
-                    return [];
+                if (typeof value === 'string') {
+                    try {
+                        return JSON.parse(value);
+                    } catch {
+                        return null;
+                    }
                 }
+                return Array.isArray(value) ? value : null;
 
             case 'Tuple':
             case 'Map':
             case 'Variant':
             case 'JSON':
             case 'Geo':
-                if (typeof value === 'object') return value;
-                try {
-                    return JSON.parse(value);
-                } catch {
-                    return null;
+                if (typeof value === 'string') {
+                    try {
+                        return JSON.parse(value);
+                    } catch {
+                        return null;
+                    }
                 }
+                return Array.isArray(value) ? value : null;
 
             default:
                 console.warn(`Unsupported ClickHouse type: ${type}, converting to string`);
@@ -220,14 +256,10 @@ export async function upsertToSnowflake(snowflakePool: any, tableName: string, b
     if (batch.length === 0) return;
 
     const columns = Object.keys(batch[0]);
-    
-    const valuesSql = batch.map((_, index) => 
-        `(${columns.map(() => '?').join(', ')})`
-    ).join(',\n');
+    const firstColumn = columns[0];
 
-    const binds: any[] = batch.flatMap(record => 
-        columns.map(col => record[col])
-    );
+    const valuesSql = batch.map(() => `(${columns.map(() => '?').join(', ')})`).join(',\n');
+    const binds: any[] = batch.flatMap(record => columns.map(col => record[col]));
 
     const query = `
         MERGE INTO ${tableName} AS target
@@ -235,19 +267,15 @@ export async function upsertToSnowflake(snowflakePool: any, tableName: string, b
             SELECT * FROM (
                 VALUES 
                 ${valuesSql}
-            ) as source(${columns.join(', ')})
+            ) as source(${columns.map(col => `"${col}"`).join(', ')})
         ) AS source
-        ON target.id = source.id
+        ON target."${firstColumn}" = source."${firstColumn}"
         WHEN MATCHED THEN
-            UPDATE SET ${columns.map(col => `target.${col} = source.${col}`).join(', ')}
+            UPDATE SET ${columns.map(col => `target."${col}" = source."${col}"`).join(', ')}
         WHEN NOT MATCHED THEN
-            INSERT (${columns.join(', ')}) 
-            VALUES (${columns.map(col => `source.${col}`).join(', ')});
+            INSERT (${columns.map(col => `"${col}"`).join(', ')}) 
+            VALUES (${columns.map(col => `source."${col}"`).join(', ')});
     `;
-
-    console.log('Executing Snowflake query:', query);
-    console.log('Binds array length:', binds.length);
-    console.log('First few binds:', binds.slice(0, 5));
 
     return new Promise((resolve, reject) => {
         snowflakePool.use(async (clientConnection: any) => {
@@ -260,6 +288,11 @@ export async function upsertToSnowflake(snowflakePool: any, tableName: string, b
                         reject(err);
                     } else {
                         console.log('Snowflake query executed successfully');
+                        if (stmt && typeof stmt.getRowsAffected === 'function') {
+                            console.log('Affected rows:', stmt.getRowsAffected());
+                        } else {
+                            console.log('Rows affected information not available');
+                        }
                         resolve(rows);
                     }
                 }
@@ -267,7 +300,6 @@ export async function upsertToSnowflake(snowflakePool: any, tableName: string, b
         });
     });
 }
-
 /**
  * Helper function to generate Snowflake CREATE TABLE SQL
  */
