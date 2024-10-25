@@ -13,14 +13,23 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useOrganization } from "@clerk/nextjs";
-import { useToast } from "@/hooks/use-toast"
-import { Toaster } from "@/components/ui/toaster"
+import { useToast } from "@/hooks/use-toast";
+import { Toaster } from "@/components/ui/toaster";
+import { createClient as Clickhouse } from '@clickhouse/client-web';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { table } from 'console';
 
 interface Warehouse {
   organization: string;
   id: string;
   status: string;
-  credentials?: ClickhouseCredentials; // Made optional to handle undefined case
+  credentials?: ClickhouseCredentials;
 }
 
 interface ClickhouseCredentials {
@@ -45,9 +54,12 @@ export default function InternalWarehouseListPage() {
   });
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [tables, setTables] = useState<string[]>([]);
+  const [selectedTable, setSelectedTable] = useState<string | null>(null);
   const { organization, isLoaded } = useOrganization();
   const { toast } = useToast();
   const isDialogOpenRef = useRef(false);
+  const [isTableSelectionStep, setIsTableSelectionStep] = useState(false); // New state for step control
 
   useEffect(() => {
     if (isLoaded && organization) {
@@ -111,7 +123,68 @@ export default function InternalWarehouseListPage() {
     }
   };
 
+  const fetchTables = async () => {
+    const clickhouseClient = Clickhouse({
+      url: newWarehouse.credentials.host,
+      username: newWarehouse.credentials.username,
+      password: newWarehouse.credentials.password,
+      database: newWarehouse.credentials.database,
+    });
+    try {
+      // Fetch tables using JSONEachRow format
+      const resultSet = await clickhouseClient.query({
+        query: 'SHOW TABLES',
+        format: 'JSONEachRow',
+      });
+      const dataset: { name: string }[] = await resultSet.json();
+
+      // Process the dataset to extract table names
+      const tables = dataset.map((row) => row.name);
+      setTables(tables);
+      setIsTableSelectionStep(true); // Move to table selection step
+    } catch (error) {
+      console.error('Error fetching tables:', error);
+      setError(error instanceof Error ? error.message : "An unknown error occurred");
+    }
+  };
+
+  const handleTestConnection = async () => {
+    try {
+      const clickhouseClient = Clickhouse({
+        url: newWarehouse.credentials.host,
+        username: newWarehouse.credentials.username,
+        password: newWarehouse.credentials.password,
+        database: newWarehouse.credentials.database,
+      });
+
+      // Test the connection
+      await clickhouseClient.query({
+        query: 'SELECT 1',
+        format: 'JSONEachRow', // Specify the format
+      }); // Simple query to test connection
+
+      // If successful, proceed to fetch tables
+      await fetchTables(); // Fetch tables and move to selection step
+    } catch (error) {
+      console.error('Error connecting Clickhouse warehouse:', error);
+      toast({
+        title: "Connection Error",
+        description: error instanceof Error ? error.message : "An unknown error occurred",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleAddWarehouse = async () => {
+    if (!selectedTable) {
+      toast({
+        title: "Table Selection Required",
+        description: "Please select a table before proceeding.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       const orgId = organization?.id;
       if (!orgId) {
@@ -125,6 +198,7 @@ export default function InternalWarehouseListPage() {
           organization: orgId,
           internal_type: 'clickhouse',
           credentials: newWarehouse.credentials,
+          table_name: selectedTable, // Include the selected table
         }),
       });
 
@@ -135,7 +209,7 @@ export default function InternalWarehouseListPage() {
 
       const data = await response.json();
       setWarehouses([...warehouses, data]);
-      setIsDialogOpen(false);
+      setIsDialogOpen(false); // Close the dialog after successful addition
       setNewWarehouse({
         credentials: {
           host: '',
@@ -144,6 +218,7 @@ export default function InternalWarehouseListPage() {
           password: '',
         }
       });
+      setSelectedTable(null); // Reset selected table
       toast({
         title: "Clickhouse Warehouse Connected",
         description: "Your Clickhouse warehouse has been successfully connected.",
@@ -151,22 +226,17 @@ export default function InternalWarehouseListPage() {
     } catch (error) {
       console.error('Error connecting Clickhouse warehouse:', error);
       toast({
-        title: "Connection Error",
+        title: "Error",
         description: error instanceof Error ? error.message : "An unknown error occurred",
         variant: "destructive",
       });
     }
   };
 
-  const handleCredentialChange = (field: keyof ClickhouseCredentials, value: string) => {
-    setNewWarehouse(prev => ({
-      credentials: { ...prev.credentials, [field]: value }
-    }));
-  };
-
   const handleDialogOpen = () => {
     isDialogOpenRef.current = true;
     setIsDialogOpen(true);
+    setIsTableSelectionStep(false); // Reset to the first step
   };
 
   return (
@@ -183,29 +253,69 @@ export default function InternalWarehouseListPage() {
           <DialogContent className="sm:max-w-[500px]">
             <DialogHeader>
               <div className="mb-4" dangerouslySetInnerHTML={{ __html: CLICKHOUSE_LOGO }} />
-              <DialogTitle>Connect to Clickhouse</DialogTitle>
+              <DialogTitle>{isTableSelectionStep ? "Select a Table" : "Connect to Clickhouse"}</DialogTitle>
               <DialogDescription>
-                Enter your Clickhouse connection details below. You can find these in your Clickhouse configuration or by consulting your database administrator.
+                {isTableSelectionStep
+                  ? "Select a table from the connected Clickhouse database."
+                  : "Enter your Clickhouse connection details below."}
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
-              {Object.keys(newWarehouse.credentials).map((field) => (
-                <div key={field} className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor={field} className="text-right font-medium">
-                    {field.charAt(0).toUpperCase() + field.slice(1)}
-                  </Label>
+              {!isTableSelectionStep ? (
+                <>
+                  <Label htmlFor="host" className="text-right font-medium">Host</Label>
                   <Input
-                    id={field}
-                    placeholder={field}
-                    type={field === 'password' ? 'password' : 'text'}
-                    className="col-span-3"
-                    value={newWarehouse.credentials[field as keyof ClickhouseCredentials]}
-                    onChange={(e) => handleCredentialChange(field as keyof ClickhouseCredentials, e.target.value)}
+                    id="host"
+                    value={newWarehouse.credentials.host}
+                    onChange={(e) => setNewWarehouse({ ...newWarehouse, credentials: { ...newWarehouse.credentials, host: e.target.value } })}
                   />
-                </div>
-              ))}
+                  <Label htmlFor="database" className="text-right font-medium">Database</Label>
+                  <Input
+                    id="database"
+                    value={newWarehouse.credentials.database}
+                    onChange={(e) => setNewWarehouse({ ...newWarehouse, credentials: { ...newWarehouse.credentials, database: e.target.value } })}
+                  />
+                  <Label htmlFor="username" className="text-right font-medium">Username</Label>
+                  <Input
+                    id="username"
+                    value={newWarehouse.credentials.username}
+                    onChange={(e) => setNewWarehouse({ ...newWarehouse, credentials: { ...newWarehouse.credentials, username: e.target.value } })}
+                  />
+                  <Label htmlFor="password" className="text-right font-medium">Password</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    value={newWarehouse.credentials.password}
+                    onChange={(e) => setNewWarehouse({ ...newWarehouse, credentials: { ...newWarehouse.credentials, password: e.target.value } })}
+                  />
+                </>
+              ) : (
+                <>
+                  <Label htmlFor="table" className="text-right font-medium">Table</Label>
+                  <Select onValueChange={setSelectedTable}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select a table" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {tables.map((table) => (
+                        <SelectItem key={table} value={table}>
+                          {table}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </>
+              )}
             </div>
-            <Button onClick={handleAddWarehouse} className="w-full">Connect Database</Button>
+            {!isTableSelectionStep ? (
+              <Button onClick={handleTestConnection} className="w-full">
+                Test Connection
+              </Button>
+            ) : (
+              <Button onClick={handleAddWarehouse} className="w-full">
+                Connect Database
+              </Button>
+            )}
           </DialogContent>
         </Dialog>
       </div>
