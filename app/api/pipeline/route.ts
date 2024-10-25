@@ -33,8 +33,9 @@ async function getColumnTypes(clickhouse: any, tableName: string): Promise<Colum
         const columnInfo: ColumnInfo[] = rows.map((row: any) => ({
             name: row.name as string,
             type: row.type as string
+            
         }));
-
+        
         console.log('Processed Column Info:', columnInfo);
 
         if (columnInfo.length === 0) {
@@ -46,6 +47,50 @@ async function getColumnTypes(clickhouse: any, tableName: string): Promise<Colum
         console.error('Error getting column types:', error);
         throw new Error(`Failed to get column types: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
+}
+
+function generateBatchInsertQuery(tableName: string, batch: Record<string, any>[]) {
+    if (batch.length === 0) {
+        throw new Error('Batch cannot be empty');
+    }
+
+    // Get column names from the first record
+    const columns = Object.keys(batch[0]);
+    
+    // Flatten all values from all records into a single array
+    const values = batch.flatMap(record => columns.map(col => record[col]));
+    
+    // Generate the parameterized VALUES clause
+    const valuesSql = batch
+        .map((_, index) => 
+            `(${columns.map((_, colIndex) => 
+                `$${index * columns.length + colIndex + 1}`
+            ).join(', ')})`
+        )
+        .join(',\n');
+
+    // Construct the final INSERT statement
+    const sql = `
+        INSERT INTO ${tableName} (${columns.join(', ')})
+        VALUES ${valuesSql}
+    `;
+
+    return { sql, binds: values };
+}
+
+// Add this new function to properly process row data
+function processClickhouseRow(row: any, columnInfo: ColumnInfo[]): Record<string, any> {
+    // If row is an array, convert it to an object using column names
+    if (Array.isArray(row)) {
+        return columnInfo.reduce((obj, column, index) => {
+            if (index < row.length) {
+                obj[column.name] = row[index];
+            }
+            return obj;
+        }, {} as Record<string, any>);
+    }
+    // If row is already an object, return as is
+    return row;
 }
 
 export async function POST(request: NextRequest) {
@@ -90,7 +135,6 @@ export async function POST(request: NextRequest) {
         }
 
         syncId = syncData.id;
-
         // Create ClickHouse client
         clickhouse = Clickhouse({
             url: body.internal_credentials.host,
@@ -98,10 +142,9 @@ export async function POST(request: NextRequest) {
             password: body.internal_credentials.password,
             database: body.internal_credentials.database,
         });
-
-        // Get column info
-        const columnInfo = await getColumnTypes(clickhouse, body.table_name);
-        console.log('Retrieved column info:', columnInfo);
+       // Get column info before the loop
+       const columnInfo = await getColumnTypes(clickhouse, body.table_name);
+       console.log('Retrieved column info:', columnInfo);
 
         // Create Snowflake connection pool
         snowflakePool = snowflake.createPool({
@@ -128,37 +171,36 @@ export async function POST(request: NextRequest) {
             });
         });
 
-        // Query data from ClickHouse
+        // Modify the query settings
         const resultSet = await clickhouse.query({
             query: `SELECT * FROM ${body.table_name}`,
-            format: 'JSONEachRow'
+            format: 'JSONEachRow',
+            settings: {
+                output_format_json_named_tuples_as_objects: 1,
+                output_format_json_array_of_rows: 0,
+                output_format_json_quote_64bit_integers: 0,
+                output_format_json_quote_denormals: 1
+            }
         });
 
-        // Process the stream of rows
         let processedCount = 0;
         const batchSize = 1000;
         let batch: Record<string, any>[] = [];
 
-        // Process the stream
         for await (const row of resultSet.stream()) {
+            const processedRow = processClickhouseRow(row, columnInfo);
             const convertedRow: Record<string, any> = {};
-            
-            // Handle array-like or object data
-            const rowEntries = Array.isArray(row) ? 
-                row.map((value, index) => [index, value]) :
-                Object.entries(row);
 
-             for (const [key, value] of rowEntries) {
-               const index = typeof key === 'string' ? parseInt(key) : key;
-                    if (Number.isInteger(index) && index >= 0 && index < columnInfo.length) {
-                        const { name: columnName, type: columnType } = columnInfo[index];
-                        console.log(`Converting column: ${columnName}, type: ${columnType}, value: ${value}`);
-                        convertedRow[columnName] = convertClickhouseToSnowflake(columnType, value);
-                    } else {
-                        console.warn(`Invalid column index or key: ${key}, skipping`);
-                    }
-                }
+            if (processedCount === 0) {
+                console.log('First row processed:', processedRow);
+                console.log('Row keys:', Object.keys(processedRow));
+            }
             
+            for (const colInfo of columnInfo) {
+                const value = processedRow[colInfo.name];
+                convertedRow[colInfo.name] = convertClickhouseToSnowflake(colInfo.type, value);
+            }
+
             batch.push(convertedRow);
             processedCount++;
 
@@ -168,7 +210,6 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        // Process remaining rows
         if (batch.length > 0) {
             await upsertToSnowflake(snowflakePool, body.table_name, batch);
         }
@@ -178,19 +219,27 @@ export async function POST(request: NextRequest) {
             syncId,
             message: `ETL process completed successfully. Processed ${processedCount} rows.`
         });
-
     } catch (error) {
         console.error('ETL process failed:', error);
         return NextResponse.json({
             success: false,
-            syncId,
+            syncId: syncId,
             error: error instanceof Error ? error.message : 'Unknown error occurred'
         }, { status: 500 });
     } finally {
-        // Clean up connections
         if (snowflakePool) {
             try {
-                await snowflakePool.destroy();
+                await new Promise<void>((resolve, reject) => {
+                    snowflakePool.drain((err: Error | undefined) => {
+                        if (err) {
+                            console.error('Error draining Snowflake connection pool:', err);
+                            reject(err);
+                        } else {
+                            snowflakePool.clear();
+                            resolve();
+                        }
+                    });
+                });
             } catch (error) {
                 console.error('Error closing Snowflake connection pool:', error);
             }

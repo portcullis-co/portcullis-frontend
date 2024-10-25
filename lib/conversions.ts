@@ -3,30 +3,45 @@
  * @param clickhouseType - The ClickHouse data type to convert.
  * @returns The corresponding Snowflake data type.
  */
-
 export function getSnowflakeDataType(clickhouseType: string): string {
-    if (clickhouseType.startsWith('Nullable(')) {
-        const innerType = clickhouseType.slice(9, -1);
-        return getSnowflakeDataType(innerType);
+    // Guard against undefined or null input
+    if (!clickhouseType) {
+        console.warn('Received undefined or null ClickHouse type, defaulting to VARCHAR');
+        return 'VARCHAR';
     }
 
-    // Explicitly match Enum8 and Enum16 types
-    if (clickhouseType === 'Enum8' || clickhouseType === 'Enum16') {
-        return 'VARCHAR'; // Map Enum types to VARCHAR
+    // Ensure we're working with a string
+    const type = String(clickhouseType).trim();
+
+    // Handle nullable types
+    if (type.startsWith('Nullable(')) {
+        try {
+            const innerType = type.slice(9, -1);
+            return getSnowflakeDataType(innerType);
+        } catch (error) {
+            console.warn(`Error processing Nullable type: ${type}, defaulting to VARCHAR`);
+            return 'VARCHAR';
+        }
     }
 
     // Handle LowCardinality types
-    if (clickhouseType.startsWith('LowCardinality(')) {
-        const innerType = clickhouseType.slice(15, -1); // Extract the inner type
-        return getSnowflakeDataType(innerType); // Map to the inner type
+    if (type.startsWith('LowCardinality(')) {
+        try {
+            const innerType = type.slice(15, -1);
+            return getSnowflakeDataType(innerType);
+        } catch (error) {
+            console.warn(`Error processing LowCardinality type: ${type}, defaulting to VARCHAR`);
+            return 'VARCHAR';
+        }
     }
 
-    // Handle Enum types with specific definitions
-    if (clickhouseType.startsWith('Enum8(') || clickhouseType.startsWith('Enum16(')) {
-        return 'VARCHAR'; // Map Enum types to VARCHAR
+    // Handle Enum types
+    if (type.startsWith('Enum8(') || type.startsWith('Enum16(') || type === 'Enum8' || type === 'Enum16') {
+        return 'VARCHAR';
     }
 
-    switch (clickhouseType) {
+    // Main type conversion switch
+    switch (type) {
         case 'UInt8':
         case 'UInt16':
         case 'Int8':
@@ -87,114 +102,111 @@ export function getSnowflakeDataType(clickhouseType: string): string {
             return 'GEOGRAPHY';
 
         default:
-            throw new Error(`Unsupported ClickHouse type: ${clickhouseType}`);
+            console.warn(`Unsupported ClickHouse type: ${type}, defaulting to VARCHAR`);
+            return 'VARCHAR';
     }
 }
 
 /**
- * Parse enum value from ClickHouse enum definition
- * @param value - The numeric enum value
- * @param enumType - The full enum type definition
- * @returns The string representation of the enum value
- */
-function parseEnumValue(value: number, enumType: string): string {
-    const enumRegex = /'([^']+)'\s*=\s*(\d+)/g;
-    let match;
-
-    while ((match = enumRegex.exec(enumType)) !== null) {
-        if (Number(match[2]) === value) {
-            return match[1]; // Return the string representation of the enum
-        }
-    }
-
-    return String(value); // Fallback to string representation of number
-}
-
-/**
- * Converts ClickHouse data types to Snowflake data types.
+ * Converts ClickHouse data values to Snowflake-compatible values.
  * @param clickhouseType - The ClickHouse data type to convert.
  * @param value - The value to convert.
  * @returns The converted value.
  */
 export function convertClickhouseToSnowflake(clickhouseType: string, value: any): any {
-    if (value === null) return null;
-
-    // Handle Nullable types
-    if (clickhouseType.startsWith('Nullable(')) {
-        const innerType = clickhouseType.slice(9, -1);
-        return convertClickhouseToSnowflake(innerType, value);
+    // Handle null values early
+    if (value === null || value === undefined) {
+        return null;
     }
 
-    // Handle LowCardinality types
-    if (clickhouseType.startsWith('LowCardinality(')) {
-        const innerType = clickhouseType.slice(15, -1); // Extract the inner type
-        return convertClickhouseToSnowflake(innerType, value); // Map to the inner type
+    // Guard against undefined or null type
+    if (!clickhouseType) {
+        console.warn('Received undefined or null ClickHouse type, treating value as string');
+        return String(value);
     }
 
-    // Explicitly match Enum8 and Enum16 types
-    if (clickhouseType === 'Enum8' || clickhouseType === 'Enum16') {
-        return parseEnumValue(value, clickhouseType); // Convert numeric value to string representation
-    }
+    // Ensure we're working with a string type
+    const type = String(clickhouseType).trim();
 
-    // Handle Enum types with specific definitions
-    if (clickhouseType.startsWith('Enum8(') || clickhouseType.startsWith('Enum16(')) {
-        return parseEnumValue(value, clickhouseType); // Convert numeric value to string representation
-    }
+    try {
+        // Handle Nullable types
+        if (type.startsWith('Nullable(')) {
+            const innerType = type.slice(9, -1);
+            return convertClickhouseToSnowflake(innerType, value);
+        }
 
-    switch (clickhouseType) {
-        case 'UInt8':
-        case 'UInt16':
-        case 'UInt32':
-        case 'UInt64':
-        case 'Int8':
-        case 'Int16':
-        case 'Int32':
-        case 'Int64':
-            return Number(value);
+        // Handle LowCardinality types
+        if (type.startsWith('LowCardinality(')) {
+            const innerType = type.slice(15, -1);
+            return convertClickhouseToSnowflake(innerType, value);
+        }
 
-        case 'Float32':
-        case 'Float64':
-            return parseFloat(value);
-
-        case 'Decimal':
-            return parseFloat(value);
-
-        case 'String':
-        case 'FixedString':
+        // Handle Enum types
+        if (type.startsWith('Enum8(') || type.startsWith('Enum16(') || type === 'Enum8' || type === 'Enum16') {
             return String(value);
+        }
 
-        case 'Date':
-        case 'Date32':
-            return new Date(value);
+        switch (type) {
+            case 'UInt8':
+            case 'UInt16':
+            case 'UInt32':
+            case 'UInt64':
+            case 'Int8':
+            case 'Int16':
+            case 'Int32':
+            case 'Int64':
+                return value === '' ? null : Number(value);
 
-        case 'DateTime':
-        case 'DateTime64':
-            return new Date(value);
+            case 'Float32':
+            case 'Float64':
+            case 'Decimal':
+                return value === '' ? null : parseFloat(value);
 
-        case 'Bool':
-            return Boolean(value);
+            case 'String':
+            case 'FixedString':
+                return String(value);
 
-        case 'UUID':
-            return String(value);
+            case 'Date':
+            case 'Date32':
+            case 'DateTime':
+            case 'DateTime64':
+                return value ? new Date(value) : null;
 
-        case 'IPv4':
-        case 'IPv6':
-            return String(value);
+            case 'Bool':
+                return Boolean(value);
 
-        case 'Array':
-            return Array.isArray(value) ? value : JSON.parse(value);
+            case 'UUID':
+            case 'IPv4':
+            case 'IPv6':
+                return String(value);
 
-        case 'Tuple':
-        case 'Map':
-        case 'Variant':
-        case 'JSON':
-            return typeof value === 'object' ? value : JSON.parse(value);
+            case 'Array':
+                if (Array.isArray(value)) return value;
+                try {
+                    return JSON.parse(value);
+                } catch {
+                    return [];
+                }
 
-        case 'Geo':
-            return typeof value === 'object' ? value : JSON.parse(value);
+            case 'Tuple':
+            case 'Map':
+            case 'Variant':
+            case 'JSON':
+            case 'Geo':
+                if (typeof value === 'object') return value;
+                try {
+                    return JSON.parse(value);
+                } catch {
+                    return null;
+                }
 
-        default:
-            throw new Error(`Unsupported ClickHouse type: ${clickhouseType}`);
+            default:
+                console.warn(`Unsupported ClickHouse type: ${type}, converting to string`);
+                return String(value);
+        }
+    } catch (error) {
+        console.error(`Error converting value for type ${type}:`, error);
+        return null;
     }
 }
 
@@ -207,22 +219,15 @@ export function convertClickhouseToSnowflake(clickhouseType: string, value: any)
 export async function upsertToSnowflake(snowflakePool: any, tableName: string, batch: Record<string, any>[]) {
     if (batch.length === 0) return;
 
-    // Get columns from the first record
     const columns = Object.keys(batch[0]);
     
-    // Create VALUES part of the query for each row in the batch
     const valuesSql = batch.map((_, index) => 
-        `(${columns.map((_, colIndex) => `$${index * columns.length + colIndex + 1}`).join(', ')})`
+        `(${columns.map(() => '?').join(', ')})`
     ).join(',\n');
 
-    // Flatten all values for binding
-    const values = batch.flatMap(record => columns.map(col => {
-        const value = record[col];
-        if (value === undefined) {
-            console.warn(`Undefined value for column ${col} in record:`, record);
-        }
-        return value; // Return the value, which may be undefined
-    }));
+    const binds: any[] = batch.flatMap(record => 
+        columns.map(col => record[col])
+    );
 
     const query = `
         MERGE INTO ${tableName} AS target
@@ -240,15 +245,21 @@ export async function upsertToSnowflake(snowflakePool: any, tableName: string, b
             VALUES (${columns.map(col => `source.${col}`).join(', ')});
     `;
 
+    console.log('Executing Snowflake query:', query);
+    console.log('Binds array length:', binds.length);
+    console.log('First few binds:', binds.slice(0, 5));
+
     return new Promise((resolve, reject) => {
         snowflakePool.use(async (clientConnection: any) => {
             clientConnection.execute({
                 sqlText: query,
-                binds: values,
+                binds: binds,
                 complete: function(err: Error | undefined, stmt: any, rows: any) {
                     if (err) {
+                        console.error('Error executing Snowflake query:', err);
                         reject(err);
                     } else {
+                        console.log('Snowflake query executed successfully');
                         resolve(rows);
                     }
                 }
