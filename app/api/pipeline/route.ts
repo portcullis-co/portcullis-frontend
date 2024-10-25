@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { z } from 'zod';
-import { convertClickhouseToSnowflake, upsertToSnowflake } from '@/lib/conversions';
-import { createConnection } from 'snowflake-sdk';
+import { convertClickhouseToSnowflake, upsertToSnowflake, generateSnowflakeCreateTableSQL } from '@/lib/conversions';
+import snowflake from 'snowflake-sdk';
 import { createClient as Clickhouse } from '@clickhouse/client';
 
 const requestSchema = z.object({
@@ -51,7 +51,7 @@ async function getColumnTypes(clickhouse: any, tableName: string): Promise<Colum
 export async function POST(request: NextRequest) {
     const supabase = createClient();
     let syncId: string | null = null;
-    let snowflakeClient: any = null;
+    let snowflakePool: any = null;
     let clickhouse: any = null;
 
     try {
@@ -84,20 +84,9 @@ export async function POST(request: NextRequest) {
             .select()
             .single();
 
-        if (syncError) {
-            console.error('Database error:', syncError);
-            return NextResponse.json({
-                success: false,
-                error: 'Database error',
-                details: syncError.message
-            }, { status: 500 });
-        }
-
-        if (!syncData) {
-            return NextResponse.json({
-                success: false,
-                error: 'Failed to create sync record: No data returned'
-            }, { status: 500 });
+        if (syncError || !syncData) {
+            const error = syncError?.message || 'Failed to create sync record: No data returned';
+            return NextResponse.json({ success: false, error }, { status: 500 });
         }
 
         syncId = syncData.id;
@@ -114,14 +103,29 @@ export async function POST(request: NextRequest) {
         const columnInfo = await getColumnTypes(clickhouse, body.table_name);
         console.log('Retrieved column info:', columnInfo);
 
-        // Create Snowflake client
-        snowflakeClient = createConnection({
+        // Create Snowflake connection pool
+        snowflakePool = snowflake.createPool({
             account: body.link_credentials.account,
             username: body.link_credentials.username,
             password: body.link_credentials.password,
             database: body.link_credentials.database,
             schema: body.link_credentials.schema,
-            warehouse: body.link_credentials.warehouse,
+        }, {
+            max: 10, // Maximum number of connections in the pool
+            min: 0    // Minimum number of connections in the pool
+        });
+        // Use the connection pool to create or verify table exists in Snowflake
+        await snowflakePool.use(async (clientConnection: snowflake.Connection) => {
+            const createTableSQL = generateSnowflakeCreateTableSQL(body.table_name, columnInfo);
+            await clientConnection.execute({
+                sqlText: createTableSQL,
+                complete: (err: Error | undefined) => {
+                    if (err) {
+                        console.error('Error creating table:', err);
+                        throw err; // Rethrow to handle in the outer scope
+                    }
+                }
+            });
         });
 
         // Query data from ClickHouse
@@ -144,28 +148,29 @@ export async function POST(request: NextRequest) {
                 row.map((value, index) => [index, value]) :
                 Object.entries(row);
 
-            for (const [key, value] of rowEntries) {
-                const index = typeof key === 'string' ? parseInt(key) : key;
-                if (Number.isInteger(index) && index >= 0 && index < columnInfo.length) {
-                    const { name: columnName, type: columnType } = columnInfo[index];
-                    convertedRow[columnName] = convertClickhouseToSnowflake(columnType, value);
-                } else {
-                    console.warn(`Invalid column index or key: ${key}, skipping`);
+             for (const [key, value] of rowEntries) {
+               const index = typeof key === 'string' ? parseInt(key) : key;
+                    if (Number.isInteger(index) && index >= 0 && index < columnInfo.length) {
+                        const { name: columnName, type: columnType } = columnInfo[index];
+                        console.log(`Converting column: ${columnName}, type: ${columnType}, value: ${value}`);
+                        convertedRow[columnName] = convertClickhouseToSnowflake(columnType, value);
+                    } else {
+                        console.warn(`Invalid column index or key: ${key}, skipping`);
+                    }
                 }
-            }
             
             batch.push(convertedRow);
             processedCount++;
 
             if (batch.length >= batchSize) {
-                await upsertToSnowflake(snowflakeClient, body.table_name, batch);
+                await upsertToSnowflake(snowflakePool, body.table_name, batch);
                 batch = [];
             }
         }
 
         // Process remaining rows
         if (batch.length > 0) {
-            await upsertToSnowflake(snowflakeClient, body.table_name, batch);
+            await upsertToSnowflake(snowflakePool, body.table_name, batch);
         }
 
         return NextResponse.json({
@@ -183,16 +188,11 @@ export async function POST(request: NextRequest) {
         }, { status: 500 });
     } finally {
         // Clean up connections
-        if (snowflakeClient) {
+        if (snowflakePool) {
             try {
-                await new Promise((resolve, reject) => {
-                    snowflakeClient.destroy((err: Error) => {
-                        if (err) reject(err);
-                        else resolve(true);
-                    });
-                });
+                await snowflakePool.destroy();
             } catch (error) {
-                console.error('Error closing Snowflake connection:', error);
+                console.error('Error closing Snowflake connection pool:', error);
             }
         }
         
