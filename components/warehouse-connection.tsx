@@ -17,7 +17,7 @@
   import { DataWarehouseForm } from "@/components/data-warehouse-form"; // Import the DataWarehouseForm
   import { toast, useToast } from '@/hooks/use-toast'
   import { Toaster } from './ui/toaster'
-import { DropdownMenu } from './ui/dropdown-menu'
+  import { DropdownMenu } from './ui/dropdown-menu'
 
   interface Warehouse {
     id: string
@@ -99,6 +99,9 @@ import { DropdownMenu } from './ui/dropdown-menu'
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState(false);
+    // Add to the existing state declarations
+    const [seedPhrase, setSeedPhrase] = useState('');
+    const [seedPhraseError, setSeedPhraseError] = useState('');
     const [credentials, setCredentials] = useState<Credentials>({
       username: "",
       password: "",
@@ -303,12 +306,57 @@ import { DropdownMenu } from './ui/dropdown-menu'
       }
       return null
     }
+    
+    // Add this function to verify the seed phrase
+    async function verifySeedPhrase(seedPhrase: string, token: string) {
+      const response = await fetch(`/api/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ seedPhrase, token })
+      });
+      if (!response.ok) {
+        toast({
+          title: 'Failed to verify seed phrase',
+          description: 'Please try again.',
+        })
+      }
+      const data = await response.json();
+      return data.verified;
+    }
 
     const handleContinue = async () => {
       console.log('handleContinue called, current step:', step);
       console.log('Current linkDetails:', linkDetails);
       
-      if (step < 2) {
+      if (step === 0) {
+        setStep(0.5); // Go to seed phrase verification
+      } else if (step === 0.5) {
+        // Verify seed phrase before proceeding
+        try {
+          if (!token) throw new Error('Token is missing');
+          const response = await fetch('/api/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ seedPhrase, token })
+          });
+          
+          const responseData = await response.json();
+          console.log('Server response:', responseData);
+
+          if (!response.ok) {
+            throw new Error(responseData.error || 'Failed to verify seed phrase');
+          }
+
+          if (responseData.verified) {
+            setStep(1);
+          } else {
+            setSeedPhraseError('Invalid seed phrase. Please try again.');
+          }
+        } catch (error) {
+          console.error('Error verifying seed phrase:', error);
+          setSeedPhraseError('Failed to verify seed phrase. Please try again.');
+        }
+      } else if (step < 2) {
         setStep(step + 1);
       } else if (step === 2) {
         if (!linkDetails) {
@@ -617,6 +665,62 @@ import { DropdownMenu } from './ui/dropdown-menu'
               </CardFooter>
             </Card>
           )
+
+          case 0.5:
+          return (
+            <Card className="max-w-lg mx-auto">
+              <CardHeader>
+                <CardTitle>Enter Your Seed Phrase</CardTitle>
+                <CardDescription>
+                  Please enter the seed phrase provided with your invite link.
+                  Format: Gemstone-Treasure-Location
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <Input
+                    placeholder="e.g., Ruby-Crown-Crypt"
+                    value={seedPhrase}
+                    onChange={(e) => {
+                      setSeedPhrase(e.target.value);
+                      setSeedPhraseError('');
+                    }}
+                    className={seedPhraseError ? 'border-red-500' : ''}
+                  />
+                  {seedPhraseError && (
+                    <p className="text-red-500 text-sm">{seedPhraseError}</p>
+                  )}
+                </div>
+              </CardContent>
+              <CardFooter>
+                <Button 
+                  onClick={async () => {
+                    try {
+                      const response = await fetch('/api/verify', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                          seedPhrase,
+                          token: token 
+                        })
+                      });
+                      
+                      if (!response.ok) {
+                        throw new Error('Invalid seed phrase');
+                      }
+                      
+                      setStep(1);
+                    } catch (error) {
+                      setSeedPhraseError('Invalid seed phrase. Please try again.');
+                    }
+                  }} 
+                  className="w-full"
+                >
+                  Verify Seed Phrase
+                </Button>
+              </CardFooter>
+            </Card>
+          );
           case 1:
             return (
               <Card>
@@ -708,6 +812,7 @@ import { DropdownMenu } from './ui/dropdown-menu'
             {renderStep()}
           </div>
         </DialogContent>
+        <Toaster />
       </Dialog>
     )
   }

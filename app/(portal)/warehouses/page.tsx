@@ -326,8 +326,10 @@ export default function InternalWarehouseListPage() {
       ) : error ? (
         <p className="text-red-500">{error}</p>
       ) : (
-        <div className="bg-white shadow-md rounded-lg overflow-hidden">
-          <table className="min-w-full">
+        <div className="space-y-6">
+        <h1 className="text-2xl md:text-3xl font-semibold">Internal Warehouses</h1>
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-100">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Connection ID</th>
@@ -367,6 +369,7 @@ export default function InternalWarehouseListPage() {
               )}
             </tbody>
           </table>
+        </div>
         </div>
       )}
       <Toaster />

@@ -10,14 +10,27 @@ import {
   } from '@clerk/nextjs'
 import './globals.css'
 import { Toaster } from '@/components/ui/toaster';
-import { Inter } from 'next/font/google';
+import { Montserrat } from 'next/font/google';
 
-const inter = Inter({ subsets: ['latin'] });
+const montserrat = Montserrat({ subsets: ['latin']});
 
 export const metadata: Metadata = {
-	title: 'Next.js Shadcn + v0 Starter Template',
+	title: 'Portcullis | Magic Links for Enterprise Data Sharing',
 	description:
-		'Next.js Starter Template with Tailwind CSS, Shadcn Components, v0 Components (Alpha), Bun as npm installer and builder, Vercel as deployer.',
+		'Portcullis is a platform for securely sharing data from Clickhouse enterprises using secure magic links.',
+	icons: {
+		icon: '/favicon.ico',
+	},
+	openGraph: {
+		title: 'Portcullis | Magic Links for Enterprise Data Sharing',
+		description: 'Portcullis is a platform for securely sharing data from Clickhouse enterprises using secure magic links.',
+		images: ['/og.png'],
+	},
+	twitter: {
+		title: 'Portcullis | Magic Links for Enterprise Data Sharing',
+		description: 'Portcullis is a platform for securely sharing data from Clickhouse enterprises using secure magic links.',
+		images: ['/og.png'],
+	},
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -25,7 +38,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 		<html lang='en' suppressHydrationWarning>
 			<ThemeProvider attribute='class' defaultTheme='light' enableSystem>
 			<ClerkProvider>
-				<body className={inter.className}>{children}</body>
+				<body className={montserrat.className}>{children}</body>
 				<Toaster />
 			</ClerkProvider>
 			</ThemeProvider>

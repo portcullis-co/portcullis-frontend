@@ -10,6 +10,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { Toaster } from "@/components/ui/toaster"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@clerk/nextjs"
+import crypto from 'crypto';
 
 type Link = {
   id: string;
@@ -17,21 +18,46 @@ type Link = {
   createdAt: string;
   imageUrl: string;
   redirectUrl: string;
+  hashedPhrase: string;
+  salt: string;
   invite_token: string;
   internal_warehouse: string;
+  recipient_email?: string; // Add this line
 };
 
-async function createInviteLink(imageUrl: string, redirectUrl: string, internal_warehouse: string,): Promise<Link> {
+async function createInviteLink(
+  organizationId: string,
+  imageUrl: string, 
+  redirectUrl: string, 
+  internal_warehouse: string,
+  recipient_email: string,
+): Promise<Link> {
+  const seedPhrase = organizationId ? generateSeedPhrase(organizationId) : null;
+  console.log('seedPhrase', seedPhrase);
+  console.log('organizationId', organizationId);
   const response = await fetch('/api/links', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ logo: imageUrl, redirectUrl, internal_warehouse,}),
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      organization: organizationId,
+      logo: imageUrl, 
+      redirectUrl, 
+      internal_warehouse,
+      recipient_email,
+      hashedPhrase: seedPhrase?.hash,
+      seedPhrase: seedPhrase?.phrase,
+    }),
   });
   if (!response.ok) {
     const errorData = await response.json();
+    console.error('Server error:', errorData);
     throw new Error(errorData.error || 'Failed to create invite link');
   }
-  return response.json();
+  const data = await response.json();
+  console.log('Server response:', data);
+  return data;
 }
 
 async function fetchInviteLinks() {
@@ -54,6 +80,26 @@ async function deleteInviteLink(id: string): Promise<void> {
   if (!response.ok) throw new Error('Failed to delete invite link');
 }
 
+// Add this utility function at the top of the file
+const gemstones = ['Ruby', 'Sapphire', 'Emerald', 'Diamond', 'Opal', 'Amethyst', 'Topaz', 'Jade', 'Onyx', 'Pearl', 'Garnet', 'Aquamarine', 'Peridot', 'Tanzanite', 'Morganite'];
+const treasures = ['Crown', 'Chalice', 'Amulet', 'Ring', 'Scepter', 'Medallion', 'Orb', 'Talisman', 'Bracelet', 'Brooch', 'Diadem', 'Goblet', 'Locket', 'Pendant', 'Tiara'];
+const dungeonElements = ['Crypt', 'Chamber', 'Vault', 'Sanctum', 'Labyrinth', 'Dungeon', 'Cavern', 'Grotto', 'Catacomb', 'Abyss', 'Citadel', 'Spire', 'Nexus', 'Oubliette', 'Bastion'];
+const mythicalCreatures = ['Dragon', 'Phoenix', 'Unicorn', 'Griffon', 'Kraken', 'Chimera', 'Basilisk', 'Hydra', 'Manticore', 'Pegasus', 'Cerberus', 'Minotaur', 'Sphinx', 'Leviathan', 'Wyvern'];
+const magicalElements = ['Fire', 'Ice', 'Lightning', 'Shadow', 'Light', 'Earth', 'Wind', 'Water', 'Void', 'Arcane', 'Celestial', 'Infernal', 'Ethereal', 'Astral', 'Primal'];
+
+function generateSeedPhrase(orgId: string): { phrase: string; hash: string } {
+  const randomElement = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)];
+  const visiblePhrase = `${randomElement(gemstones)}-${randomElement(treasures)}-${randomElement(dungeonElements)}-${randomElement(mythicalCreatures)}-${randomElement(magicalElements)}`;
+  const randomNumber = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+  const fullPhrase = `${visiblePhrase}-${randomNumber}-${orgId}`;
+  const hash = hashPhrase(fullPhrase);
+  return { phrase: visiblePhrase, hash };
+}
+
+function hashPhrase(phrase: string): string {
+  return crypto.createHash('sha256').update(phrase).digest('hex');
+}
+
 async function fetchWarehouses(organizationId: string) {
   const response = await fetch(`/api/warehouses?organizationId=${organizationId}`);
   if (!response.ok) throw new Error('Failed to fetch warehouses');
@@ -62,7 +108,7 @@ async function fetchWarehouses(organizationId: string) {
 
 export default function InviteLinks() {
   const { organization } = useOrganization();
-  const organizationId = organization?.id;
+  const organizationId = organization?.id || '';
   const [links, setLinks] = useState<Link[]>([]);
   const [warehouses, setWarehouses] = useState<Array<{ id: string; created_at: string }>>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -71,6 +117,7 @@ export default function InviteLinks() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const imageUrl = useOrganization().organization?.imageUrl;
   const { toast } = useToast()
+  const [recipientEmail, setRecipientEmail] = useState(''); // Add this line
 
   useEffect(() => {
     loadLinks();
@@ -116,14 +163,25 @@ export default function InviteLinks() {
   const handleCreateLink = async () => {
     setIsLoading(true);
     try {
-      const newLink = await createInviteLink(imageUrl || '', redirectUrl, selectedWarehouseId);
-      
+      if (!organization || !organization.id) {
+        throw new Error('No organization ID available');
+      }
+  
+      const newLink = await createInviteLink(
+        organizationId,
+        imageUrl || '',
+        redirectUrl,
+        selectedWarehouseId,
+        recipientEmail
+      );
+  
       if (newLink && newLink.invite_token) {
         const copyableLink = `${window.location.origin}/invite/${newLink.invite_token}`;
         setLinks((prevLinks) => [newLink, ...prevLinks]);
         showToast('Invite link created successfully', 'success');
         setRedirectUrl('');
         setSelectedWarehouseId('');
+        setRecipientEmail('');
         setIsDialogOpen(false);
       } else {
         throw new Error('Invalid response from server');
@@ -131,8 +189,9 @@ export default function InviteLinks() {
     } catch (error) {
       console.error('Error creating invite link:', error);
       showToast('Failed to create invite link', 'error');
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   const handleDeleteLink = async (id: string) => {
@@ -185,11 +244,21 @@ export default function InviteLinks() {
               </SelectContent>
             </Select>
             <Input
+              type="email"
+              value={recipientEmail}
+              onChange={(e) => setRecipientEmail(e.target.value)}
+              placeholder="Enter recipient's email"
+              required
+            />
+            <Input
               value={redirectUrl}
               onChange={(e) => setRedirectUrl(e.target.value)}
               placeholder="Enter redirect URL"
             />
-            <Button onClick={handleCreateLink} disabled={isLoading}>
+            <Button 
+              onClick={handleCreateLink} 
+              disabled={isLoading || !recipientEmail || !selectedWarehouseId}
+            >
               {isLoading ? 'Creating...' : 'Create Invite Link'}
             </Button>
           </div>
@@ -199,6 +268,7 @@ export default function InviteLinks() {
         <TableHeader>
           <TableRow>
             <TableHead>Invite Link</TableHead>
+            <TableHead>Recipient</TableHead>
             <TableHead>Created</TableHead>
             <TableHead>Actions</TableHead>
           </TableRow>
@@ -209,6 +279,7 @@ export default function InviteLinks() {
               <TableCell>
                 <CopyLinkInput link={`${window.location.origin}/invite/${row.invite_token}`} />
               </TableCell>
+              <TableCell>{row.recipient_email}</TableCell>
               <TableCell>{formatDate(row.createdAt)}</TableCell>
               <TableCell>
                 <Button 
