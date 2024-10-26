@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { table } from 'console';
+import Image from 'next/image';
 
 interface Warehouse {
   organization: string;
@@ -38,8 +39,6 @@ interface ClickhouseCredentials {
   username: string;
   password: string;
 }
-
-const CLICKHOUSE_LOGO = `<img src="https://cdn.brandfetch.io/idnezyZEJm/theme/dark/symbol.svg?k=bfHSJFAPEG" alt="Clickhouse Logo" width="30" height="30" />`;
 
 export default function InternalWarehouseListPage() {
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
@@ -243,7 +242,8 @@ export default function InternalWarehouseListPage() {
     <div className="max-w-4xl mx-auto p-6">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <div className="mb-2" dangerouslySetInnerHTML={{ __html: CLICKHOUSE_LOGO }} />
+          <div className="mb-2" />
+          <Image src="/clickhouse.svg" alt="Clickhouse Logo" width={30} height={30} />
           <h1 className="text-3xl font-bold">Clickhouse Connection Manager</h1>
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -252,7 +252,8 @@ export default function InternalWarehouseListPage() {
           </DialogTrigger>
           <DialogContent className="sm:max-w-[500px]">
             <DialogHeader>
-              <div className="mb-4" dangerouslySetInnerHTML={{ __html: CLICKHOUSE_LOGO }} />
+              <div className="mb-4" />
+              <Image src="/clickhouse.svg" alt="Clickhouse Logo" width={30} height={30} />
               <DialogTitle>{isTableSelectionStep ? "Select a Table" : "Connect to Clickhouse"}</DialogTitle>
               <DialogDescription>
                 {isTableSelectionStep

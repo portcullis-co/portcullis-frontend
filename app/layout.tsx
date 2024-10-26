@@ -10,9 +10,9 @@ import {
   } from '@clerk/nextjs'
 import './globals.css'
 import { Toaster } from '@/components/ui/toaster';
-import { Arimo } from 'next/font/google';
+import { Inter } from 'next/font/google';
 
-const arimo = Arimo({ subsets: ['latin'] });
+const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
 	title: 'Next.js Shadcn + v0 Starter Template',
@@ -25,7 +25,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 		<html lang='en' suppressHydrationWarning>
 			<ThemeProvider attribute='class' defaultTheme='light' enableSystem>
 			<ClerkProvider>
-				<body className={arimo.className}>{children}</body>
+				<body className={inter.className}>{children}</body>
 				<Toaster />
 			</ClerkProvider>
 			</ThemeProvider>
