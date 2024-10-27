@@ -255,27 +255,66 @@ export function convertClickhouseToSnowflake(clickhouseType: string, value: any)
 export async function upsertToSnowflake(snowflakePool: any, tableName: string, batch: Record<string, any>[]) {
     if (batch.length === 0) return;
 
-    const columns = Object.keys(batch[0]);
-    const firstColumn = columns[0];
+    // Get all columns except metadata
+    const columns = Object.keys(batch[0]).filter(key => key !== '__metadata');
+    
+    // Get primary keys from metadata, fallback to first column if none found
+    const primaryKeys = batch[0].__metadata?.primaryKeys || [columns[0]];
+    console.log('Primary keys:', primaryKeys);
+    console.log('All columns:', columns);
 
-    const valuesSql = batch.map(() => `(${columns.map(() => '?').join(', ')})`).join(',\n');
-    const binds: any[] = batch.flatMap(record => columns.map(col => record[col]));
+    // First, try to deduplicate the batch based on primary keys
+    const deduplicatedBatch = batch.reduce((acc: Record<string, any>[], curr: Record<string, any>) => {
+        const key = primaryKeys.map((pk: string) => curr[pk]).join('|');
+        const existing = acc.findIndex(item => 
+            primaryKeys.map((pk: string) => item[pk]).join('|') === key
+        );
+        
+        if (existing === -1) {
+            acc.push(curr);
+        } else {
+            // Update existing record with new values
+            acc[existing] = { ...acc[existing], ...curr };
+        }
+        return acc;
+    }, []);
+
+    console.log(`Reduced batch from ${batch.length} to ${deduplicatedBatch.length} records after deduplication`);
+
+    const valuesSql = deduplicatedBatch.map(() => `(${columns.map(() => '?').join(', ')})`).join(',\n');
+    const binds: any[] = deduplicatedBatch.flatMap(record => columns.map(col => record[col]));
+
+    // Build ON clause using all primary keys
+    const onConditions = primaryKeys
+        .map((key: string) => `target."${key}" = source."${key}"`)
+        .join(' AND ');
+
+    // Only update non-primary key columns
+    const updateColumns = columns
+        .filter(col => !primaryKeys.includes(col))
+        .map(col => `target."${col}" = source."${col}"`);
 
     const query = `
         MERGE INTO ${tableName} AS target
         USING (
-            SELECT * FROM (
-                VALUES 
-                ${valuesSql}
+            SELECT DISTINCT ${columns.map(col => `source."${col}"`).join(', ')}
+            FROM (
+                SELECT * FROM (
+                    VALUES 
+                    ${valuesSql}
+                )
             ) as source(${columns.map(col => `"${col}"`).join(', ')})
         ) AS source
-        ON target."${firstColumn}" = source."${firstColumn}"
+        ON ${onConditions}
         WHEN MATCHED THEN
-            UPDATE SET ${columns.map(col => `target."${col}" = source."${col}"`).join(', ')}
+            UPDATE SET ${updateColumns.join(', ')}
         WHEN NOT MATCHED THEN
             INSERT (${columns.map(col => `"${col}"`).join(', ')}) 
             VALUES (${columns.map(col => `source."${col}"`).join(', ')});
     `;
+
+    console.log('Executing MERGE query:', query);
+    console.log('With binds:', binds);
 
     return new Promise((resolve, reject) => {
         snowflakePool.use(async (clientConnection: any) => {
@@ -288,11 +327,6 @@ export async function upsertToSnowflake(snowflakePool: any, tableName: string, b
                         reject(err);
                     } else {
                         console.log('Snowflake query executed successfully');
-                        if (stmt && typeof stmt.getRowsAffected === 'function') {
-                            console.log('Affected rows:', stmt.getRowsAffected());
-                        } else {
-                            console.log('Rows affected information not available');
-                        }
                         resolve(rows);
                     }
                 }

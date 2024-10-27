@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { convertClickhouseToSnowflake, upsertToSnowflake, generateSnowflakeCreateTableSQL } from '@/lib/conversions';
 import snowflake from 'snowflake-sdk';
 import { createClient as Clickhouse } from '@clickhouse/client';
+import { decrypt } from '@/lib/encryption';
 
 const requestSchema = z.object({
     organization: z.string().min(1),
@@ -17,10 +18,24 @@ const requestSchema = z.object({
 interface ColumnInfo {
     name: string;
     type: string;
+    isPrimaryKey: boolean;  // Add this line
+}
+
+interface TableMetadata {
+    name: string;
+    type: string;
+    isPrimaryKey: boolean;
 }
 
 async function getColumnTypes(clickhouse: any, tableName: string): Promise<ColumnInfo[]> {
     try {
+        // First, get the primary key information
+        const pkResult = await clickhouse.query({
+            query: `SELECT * FROM system.columns WHERE table='${tableName}' AND is_in_primary_key=1`,
+            format: 'JSONEachRow'
+        });
+        const pkColumns = new Set((await pkResult.json()).map((col: any) => col.name));
+
         const result = await clickhouse.query({
             query: `DESCRIBE TABLE ${tableName}`,
             format: 'JSONStringsEachRow'
@@ -29,18 +44,17 @@ async function getColumnTypes(clickhouse: any, tableName: string): Promise<Colum
         const rows = await result.json();
         console.log('Raw Column Types Result:', rows);
 
-        // Store column info in order
-        const columnInfo: ColumnInfo[] = rows.map((rows: any) => ({
-            name: rows.name as string,
-            type: rows.type as string
+        if (rows.length === 0) {
+            throw new Error('No columns found in table');
+        }
+
+        const columnInfo = rows.map((row: any) => ({
+            name: row.name as string,
+            type: row.type as string,
+            isPrimaryKey: pkColumns.has(row.name)
         }));
         
         console.log('Processed Column Info:', columnInfo);
-
-        if (columnInfo.length === 0) {
-            throw new Error('No columns found in table');
-        }
-        console.log('Column Info:', columnInfo)
         return columnInfo;
     } catch (error) {
         console.error('Error getting column types:', error);
@@ -50,52 +64,27 @@ async function getColumnTypes(clickhouse: any, tableName: string): Promise<Colum
 
 function processClickhouseRow(row: any[], columnInfo: ColumnInfo[]): Record<string, any> {
     console.log('Raw ClickHouse row:', JSON.stringify(row, null, 2));
-    
-    const processedRow: Record<string, any> = {};
+        
+    const processedRow: Record<string, any> = {
+        __metadata: {
+            primaryKeys: columnInfo.filter(col => col.isPrimaryKey).map(col => col.name)
+        }
+    };
     
     try {
-        // Check if row is an array of values
         if (Array.isArray(row)) {
-            // Process each column based on its position in the array
             columnInfo.forEach((column, index) => {
-                let value = row[index];
-                
-                // If the value is an object with a 'text' property, use that
-                if (value && typeof value === 'object' && 'text' in value) {
-                    value = value.text;
-                }
-                
-                // If the value is a string that looks like an array, parse it
-                if (typeof value === 'string' && value.startsWith('[') && value.endsWith(']')) {
-                    try {
-                        const parsedArray = JSON.parse(value);
-                        // Use the value at the same index if it's an array
-                        value = parsedArray[index] ?? null;
-                    } catch (e) {
-                        console.warn(`Failed to parse array string: ${value}`);
-                    }
-                }
-                
-                try {
-                    // Convert the value based on ClickHouse type
-                    const convertedValue = convertClickhouseToSnowflake(column.type, value);
-                    processedRow[column.name] = convertedValue;
-                } catch (columnError) {
-                    console.error(`Error converting value for column ${column.name}:`, columnError);
-                    // Store the original value if conversion fails
-                    processedRow[column.name] = value;
-                }
+                const value = row[index];
+                const convertedValue = convertClickhouseToSnowflake(column.type, value);
+                processedRow[column.name] = convertedValue;
             });
-        } else {
-            console.error('Row is not an array:', row);
-            return {};
         }
     } catch (error) {
         console.error('Error processing row:', error);
         return {};
     }
 
-    console.log('Processed row:', processedRow);
+    console.log('Processed row with metadata:', processedRow);
     return processedRow;
 }
 
@@ -137,6 +126,14 @@ export async function POST(request: NextRequest) {
         const body = validationResult.data;
         const linkType = body.link_type.toLowerCase();
 
+        const decryptedInternalCreds = typeof body.internal_credentials === 'string' 
+        ? await decrypt(body.internal_credentials)
+        : body.internal_credentials;
+        
+      const decryptedLinkCreds = typeof body.link_credentials === 'string'
+            ? await decrypt(body.link_credentials)
+            : body.link_credentials;
+
         // Create sync record
         const { data: syncData, error: syncError } = await supabase
             .from('syncs')
@@ -145,7 +142,7 @@ export async function POST(request: NextRequest) {
                 internal_warehouse: body.internal_warehouse,
                 table_name: body.table_name,
                 link_type: linkType,
-                internal_credentials: body.internal_credentials,
+                internal_credentials: decryptedInternalCreds,
                 link_credentials: body.link_credentials,
             })
             .select()
@@ -158,11 +155,12 @@ export async function POST(request: NextRequest) {
 
         syncId = syncData.id;
         // Create ClickHouse client
-        clickhouse = Clickhouse({
-            url: body.internal_credentials.host,
-            username: body.internal_credentials.username,
-            password: body.internal_credentials.password,
-            database: body.internal_credentials.database,
+        // Create ClickHouse client
+        clickhouse = await Clickhouse({
+            url: decryptedInternalCreds.host,
+            username: decryptedInternalCreds.username,
+            password: decryptedInternalCreds.password,
+            database: decryptedInternalCreds.database,
         });
 
         // Get column info before the loop

@@ -183,32 +183,39 @@ export default function InternalWarehouseListPage() {
       });
       return;
     }
-
+  
     try {
       const orgId = organization?.id;
       if (!orgId) {
         throw new Error('Organization ID is not available');
       }
-
+  
+      const encryptedCredentials = {
+        host: newWarehouse.credentials.host,
+        database: newWarehouse.credentials.database,
+        username: newWarehouse.credentials.username,
+        password: newWarehouse.credentials.password,
+      };
+  
       const response = await fetch('/api/warehouses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           organization: orgId,
           internal_type: 'clickhouse',
-          credentials: newWarehouse.credentials,
-          table_name: selectedTable, // Include the selected table
+          credentials: encryptedCredentials,
+          table_name: selectedTable,
         }),
       });
-
+  
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Failed to add warehouse');
       }
-
+  
       const data = await response.json();
       setWarehouses([...warehouses, data]);
-      setIsDialogOpen(false); // Close the dialog after successful addition
+      setIsDialogOpen(false);
       setNewWarehouse({
         credentials: {
           host: '',
@@ -217,7 +224,8 @@ export default function InternalWarehouseListPage() {
           password: '',
         }
       });
-      setSelectedTable(null); // Reset selected table
+      setSelectedTable(null);
+      setIsTableSelectionStep(false);
       toast({
         title: "Clickhouse Warehouse Connected",
         description: "Your Clickhouse warehouse has been successfully connected.",

@@ -18,12 +18,11 @@ type Link = {
   createdAt: string;
   imageUrl: string;
   redirectUrl: string;
-  hashedPhrase: string;
-  salt: string;
   invite_token: string;
   internal_warehouse: string;
   recipient_email?: string; // Add this line
 };
+
 
 async function createInviteLink(
   organizationId: string,
@@ -31,10 +30,9 @@ async function createInviteLink(
   redirectUrl: string, 
   internal_warehouse: string,
   recipient_email: string,
+  password: string,
 ): Promise<Link> {
-  const seedPhrase = organizationId ? generateSeedPhrase(organizationId) : null;
-  console.log('seedPhrase', seedPhrase);
-  console.log('organizationId', organizationId);
+  
   const response = await fetch('/api/links', {
     method: 'POST',
     headers: {
@@ -46,8 +44,7 @@ async function createInviteLink(
       redirectUrl, 
       internal_warehouse,
       recipient_email,
-      hashedPhrase: seedPhrase?.hash,
-      seedPhrase: seedPhrase?.phrase,
+      password: password,
     }),
   });
   if (!response.ok) {
@@ -80,26 +77,6 @@ async function deleteInviteLink(id: string): Promise<void> {
   if (!response.ok) throw new Error('Failed to delete invite link');
 }
 
-// Add this utility function at the top of the file
-const gemstones = ['Ruby', 'Sapphire', 'Emerald', 'Diamond', 'Opal', 'Amethyst', 'Topaz', 'Jade', 'Onyx', 'Pearl', 'Garnet', 'Aquamarine', 'Peridot', 'Tanzanite', 'Morganite'];
-const treasures = ['Crown', 'Chalice', 'Amulet', 'Ring', 'Scepter', 'Medallion', 'Orb', 'Talisman', 'Bracelet', 'Brooch', 'Diadem', 'Goblet', 'Locket', 'Pendant', 'Tiara'];
-const dungeonElements = ['Crypt', 'Chamber', 'Vault', 'Sanctum', 'Labyrinth', 'Dungeon', 'Cavern', 'Grotto', 'Catacomb', 'Abyss', 'Citadel', 'Spire', 'Nexus', 'Oubliette', 'Bastion'];
-const mythicalCreatures = ['Dragon', 'Phoenix', 'Unicorn', 'Griffon', 'Kraken', 'Chimera', 'Basilisk', 'Hydra', 'Manticore', 'Pegasus', 'Cerberus', 'Minotaur', 'Sphinx', 'Leviathan', 'Wyvern'];
-const magicalElements = ['Fire', 'Ice', 'Lightning', 'Shadow', 'Light', 'Earth', 'Wind', 'Water', 'Void', 'Arcane', 'Celestial', 'Infernal', 'Ethereal', 'Astral', 'Primal'];
-
-function generateSeedPhrase(orgId: string): { phrase: string; hash: string } {
-  const randomElement = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)];
-  const visiblePhrase = `${randomElement(gemstones)}-${randomElement(treasures)}-${randomElement(dungeonElements)}-${randomElement(mythicalCreatures)}-${randomElement(magicalElements)}`;
-  const randomNumber = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
-  const fullPhrase = `${visiblePhrase}-${randomNumber}-${orgId}`;
-  const hash = hashPhrase(fullPhrase);
-  return { phrase: visiblePhrase, hash };
-}
-
-function hashPhrase(phrase: string): string {
-  return crypto.createHash('sha256').update(phrase).digest('hex');
-}
-
 async function fetchWarehouses(organizationId: string) {
   const response = await fetch(`/api/warehouses?organizationId=${organizationId}`);
   if (!response.ok) throw new Error('Failed to fetch warehouses');
@@ -118,6 +95,7 @@ export default function InviteLinks() {
   const imageUrl = useOrganization().organization?.imageUrl;
   const { toast } = useToast()
   const [recipientEmail, setRecipientEmail] = useState(''); // Add this line
+  const [password, setPassword] = useState('');
 
   useEffect(() => {
     loadLinks();
@@ -172,7 +150,8 @@ export default function InviteLinks() {
         imageUrl || '',
         redirectUrl,
         selectedWarehouseId,
-        recipientEmail
+        recipientEmail,
+        password
       );
   
       if (newLink && newLink.invite_token) {
@@ -226,42 +205,49 @@ export default function InviteLinks() {
           <DialogHeader>
             <DialogTitle>Create New Invite Link</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
-            <Select value={selectedWarehouseId} onValueChange={setSelectedWarehouseId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select a warehouse" />
-              </SelectTrigger>
-              <SelectContent>
-                {warehouses.length > 0 ? (
-                  warehouses.map((warehouse) => (
-                    <SelectItem key={warehouse.id} value={warehouse.id}>
-                      {formatDate(warehouse.created_at)}
-                    </SelectItem>
-                  ))
-                ) : (
-                  <SelectItem value="no-warehouses" disabled>No warehouses available</SelectItem>
-                )}
-              </SelectContent>
-            </Select>
-            <Input
-              type="email"
-              value={recipientEmail}
-              onChange={(e) => setRecipientEmail(e.target.value)}
-              placeholder="Enter recipient's email"
-              required
-            />
-            <Input
-              value={redirectUrl}
-              onChange={(e) => setRedirectUrl(e.target.value)}
-              placeholder="Enter redirect URL"
-            />
-            <Button 
-              onClick={handleCreateLink} 
-              disabled={isLoading || !recipientEmail || !selectedWarehouseId}
-            >
-              {isLoading ? 'Creating...' : 'Create Invite Link'}
-            </Button>
-          </div>
+            <div className="space-y-4">
+              <Select value={selectedWarehouseId} onValueChange={setSelectedWarehouseId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a warehouse" />
+                </SelectTrigger>
+                <SelectContent>
+                  {warehouses.length > 0 ? (
+                    warehouses.map((warehouse) => (
+                      <SelectItem key={warehouse.id} value={warehouse.id}>
+                        {formatDate(warehouse.created_at)}
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <SelectItem value="no-warehouses" disabled>No warehouses available</SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+              <Input
+                type="email"
+                value={recipientEmail}
+                onChange={(e) => setRecipientEmail(e.target.value)}
+                placeholder="Enter recipient's email"
+                required
+              />
+              <Input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter password for the invite link"
+                required
+              />
+              <Input
+                value={redirectUrl}
+                onChange={(e) => setRedirectUrl(e.target.value)}
+                placeholder="Enter redirect URL"
+              />
+              <Button 
+                onClick={handleCreateLink} 
+                disabled={isLoading || !recipientEmail || !selectedWarehouseId || !password}
+              >
+                {isLoading ? 'Creating...' : 'Create Invite Link'}
+              </Button>
+            </div>
         </DialogContent>
       </Dialog>
       <Table>

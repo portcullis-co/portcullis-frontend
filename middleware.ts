@@ -10,6 +10,7 @@ const isPublicRoute = createRouteMatcher([
   '/portal/(.*)',
   '/sign-up',
   '/sign-in',
+  '/invite/(.*)',
   '/syncs/(.*)',
   '/terms',
   '/api/(.*)',
