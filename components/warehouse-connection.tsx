@@ -801,30 +801,38 @@
             
             case 3:
               return (
-                <div className="p-6 text-center">
-                  {isLoading ? (
-                    <p>Setting up your connection...</p>
-                  ) : error ? (
-                    <div>
-                      <p className="text-red-500">{error}</p>
-                      <Button onClick={() => setStep(3)} className="mt-4">Try Again</Button>
+                <Card className="max-w-lg mx-auto">
+                  <CardHeader>
+                    <div className="flex items-center justify-center mb-4">
+                      <CheckCircle className="h-12 w-12 text-green-500" />
                     </div>
-                  ) : (
-                    <>
-                      <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
-                      <h2 className="text-2xl font-bold mb-4">Success!</h2>
-                      <p className="mb-6">Your {selectedWarehouse?.name} has been connected and the ETL job has been set up.</p>
-                      <BackButton />
-                      <Button onClick={() => {
+                    <CardTitle className="text-center">Connection Successful!</CardTitle>
+                    <CardDescription className="text-center">
+                      Your {selectedWarehouse?.name} warehouse has been connected and the ETL pipeline is running.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div className="bg-green-50 p-4 rounded-md">
+                        <p className="text-sm text-green-700">
+                          Data synchronization has started. You can close this window and monitor the progress in your dashboard.
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                  <CardFooter className="flex justify-center">
+                    <Button 
+                      onClick={() => {
                         clearSession();
-                        onClose ? onClose() : console.log('Connection completed');
-                      }} className="w-full">
-                        Finish
-                      </Button>
-                    </>
-                  )}
-                </div>
-              )
+                        onClose?.();
+                      }}
+                      className="w-full"
+                    >
+                      Close
+                    </Button>
+                  </CardFooter>
+                </Card>
+              );
         }
       }
 
@@ -847,3 +855,4 @@
       </Dialog>
     )
   }
+

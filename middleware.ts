@@ -7,7 +7,6 @@ const isPublicRoute = createRouteMatcher([
   '/auth/(.*)',
   '/pricing',
   '/privacy',
-  '/portal/(.*)',
   '/sign-up',
   '/sign-in',
   '/invite/(.*)',
@@ -44,6 +43,7 @@ const allowedRoutes = [
 
 const allowedOrigins = [
   'http://localhost:3000',
+  'https://portcullis-app.fly.dev',
 ];
 
 function corsMiddleware(request: NextRequest, response: NextResponse) {
