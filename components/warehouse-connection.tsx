@@ -21,6 +21,7 @@
   import { Label } from './ui/label'
   import { encrypt, decrypt } from '@/lib/encryption';
   import { runPipeline } from '@/app/actions/pipeline'
+  import { Checkbox } from './ui/checkbox'
 
   interface Warehouse {
     id: string
@@ -105,6 +106,7 @@
     const [success, setSuccess] = useState(false);
     const [password, setPassword] = useState('');
     const [passwordError, setPasswordError] = useState('');
+    const [acceptedTerms, setAcceptedTerms] = useState(false)
     const defaultCredentials: Credentials = {
       username: '',
       password: '',
@@ -299,8 +301,10 @@
     }, [step, selectedWarehouse, credentials, password]);
 
     const handleBack = () => {
-      if (step === 0.5) {
+      if (step === 0.25) {
         setStep(0);
+      } else if (step === 0.5) {
+        setStep(0.25);
       } else if (step === 1) {
         setStep(0.5);
       } else if (step === 2) {
@@ -312,6 +316,14 @@
 
     const handleContinue = async () => {
       if (step === 0) {
+        setStep(0.25); // New step for T&C
+        return;
+      }
+      if (step === 0.25) {
+        if (!acceptedTerms) {
+          setError('You must accept the Terms and Conditions to continue');
+          return;
+        }
         setStep(0.5);
         return;
       }
@@ -645,6 +657,151 @@
               </CardFooter>
             </Card>
           )
+          
+          case 0.25:
+            return (
+              <Card className="max-w-lg mx-auto">
+                <CardContent>
+                  <ScrollArea className="h-[400px] w-full rounded-md border p-4">
+                    <div className="space-y-4">
+                      <h2 className="text-xl font-bold">Terms and Conditions for Data Access</h2>
+                      <p className="text-sm text-muted-foreground">Last Updated: October 28, 2024</p>
+                      
+                      {/* Terms content */}
+                      <div className="space-y-4">
+                        <section>
+                          <h3 className="font-semibold">1. Acceptance of Terms</h3>
+                          <p className="text-sm">
+                            By accepting an invitation to access data through our platform ("the Service"), 
+                            you agree to be bound by these Terms and Conditions. If you do not agree to these terms, 
+                            please do not accept the invitation or access the shared data.
+                          </p>
+                        </section>
+
+                        <section>
+                          <h3 className="font-semibold">2. Definitions</h3>
+                          <p className="text-sm">"Platform" refers to Portcullis, our enterprise data sharing solution</p>
+                          <p className="text-sm">"Invitee" or "you" refers to the individual or entity receiving access to shared data</p>
+                          <p className="text-sm">"Data Owner" refers to the organization sharing data through the platform</p>
+                          <p className="text-sm">"Confidential Information" includes any data shared through the platform</p>
+                        </section>
+
+                        <section>
+                          <h3 className="font-semibold">3. Access and Authorization</h3>
+                          <p className="text-sm">3.1. Your access is strictly limited to the specific data sets and timeframe defined in your invitation.</p>
+                          <p className="text-sm">3.2. You may not:</p>
+                          <ul className="list-disc pl-5 text-sm">
+                            <li>Share your access credentials with others</li>
+                            <li>Attempt to access data beyond your authorized scope</li>
+                            <li>Create additional accounts or invitations</li>
+                            <li>Transfer your access rights to other parties</li>
+                          </ul>
+                        </section>
+
+                        <section>
+                          <h3 className="font-semibold">4. Data Usage and Confidentiality</h3>
+                          <p className="text-sm">4.1. You agree to:</p>
+                          <ul className="list-disc pl-5 text-sm">
+                            <li>Use the shared data only for the intended purpose specified in the invitation</li>
+                            <li>Maintain the confidentiality of all accessed information</li>
+                            <li>Implement appropriate security measures to prevent unauthorized access</li>
+                            <li>Report any security incidents or unauthorized access immediately</li>
+                          </ul>
+                          <p className="text-sm mt-2">4.2. You acknowledge that any data accessed through the platform may contain confidential or proprietary information protected by intellectual property laws.</p>
+                        </section>
+
+                        <section>
+                          <h3 className="font-semibold">5. Privacy and Data Protection</h3>
+                          <p className="text-sm">5.1. You agree to:</p>
+                          <ul className="list-disc pl-5 text-sm">
+                            <li>Comply with all applicable data protection laws and regulations</li>
+                            <li>Process personal data only as authorized by the Data Owner</li>
+                            <li>Implement appropriate technical and organizational measures</li>
+                            <li>Not transfer data to unauthorized third parties</li>
+                          </ul>
+                        </section>
+
+                        <section>
+                          <h3 className="font-semibold">6. Termination</h3>
+                          <p className="text-sm">6.1. Your access may be terminated:</p>
+                          <ul className="list-disc pl-5 text-sm">
+                            <li>Upon completion of the shared project</li>
+                            <li>For violation of these terms</li>
+                            <li>At the Data Owner's discretion</li>
+                            <li>Upon your request</li>
+                          </ul>
+                          <p className="text-sm mt-2">6.2. Upon termination, you must:</p>
+                          <ul className="list-disc pl-5 text-sm">
+                            <li>Cease all data access</li>
+                            <li>Delete any locally stored copies</li>
+                            <li>Return or destroy any derived materials</li>
+                            <li>Maintain confidentiality obligations</li>
+                          </ul>
+                        </section>
+
+                        <section>
+                          <h3 className="font-semibold">7. Liability and Indemnification</h3>
+                          <p className="text-sm">7.1. You agree to indemnify and hold harmless the Platform and Data Owner from any claims arising from:</p>
+                          <ul className="list-disc pl-5 text-sm">
+                            <li>Your breach of these terms</li>
+                            <li>Unauthorized use of the data</li>
+                            <li>Violation of any applicable laws</li>
+                          </ul>
+                        </section>
+
+                        <section>
+                          <h3 className="font-semibold">8. Modifications</h3>
+                          <p className="text-sm">8.1. These terms may be updated at any time. Continued use of the platform constitutes acceptance of modified terms.</p>
+                        </section>
+
+                        <section>
+                          <h3 className="font-semibold">9. Governing Law</h3>
+                          <p className="text-sm">9.1. These terms shall be governed by Delaware law, without regard to conflicts of law principles.</p>
+                        </section>
+
+                        <section>
+                          <h3 className="font-semibold">10. Contact</h3>
+                          <p className="text-sm">For questions regarding these terms or to report violations, please contact:</p>
+                          <p className="text-sm">James Bohrman</p>
+                          <p className="text-sm">CEO</p>
+                          <p className="text-sm">Portcullis</p>
+                          <p className="text-sm">james@runportcullis.co</p>
+                        </section>
+
+                        <p className="text-sm italic mt-6">
+                          By accepting the invitation, you acknowledge that you have read, understood, and agree to be bound by these Terms and Conditions.
+                        </p>
+                      </div>
+                    </div>
+                  </ScrollArea>
+                  
+                  <div className="flex items-center space-x-2 mt-4">
+                    <Checkbox 
+                      id="terms" 
+                      checked={acceptedTerms}
+                      onCheckedChange={(checked) => setAcceptedTerms(checked as boolean)}
+                    />
+                    <label
+                      htmlFor="terms"
+                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                    >
+                      I accept the terms and conditions
+                    </label>
+                  </div>
+                  {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
+                </CardContent>
+                <CardFooter className="flex justify-between">
+                  <BackButton />
+                  <Button 
+                    onClick={handleContinue} 
+                    className="w-full ml-2"
+                    disabled={!acceptedTerms}
+                  >
+                    Continue
+                  </Button>
+                </CardFooter>
+              </Card>
+            )
 
           case 0.5:
             return (
