@@ -6,6 +6,7 @@ import { createClient as Clickhouse } from '@clickhouse/client';
 import { decrypt } from '@/lib/encryption';
 import { z } from 'zod';
 import { logger } from "@trigger.dev/sdk/v3";
+import { createServerClient } from '@supabase/ssr'
 
 // Schema and interfaces
 const requestSchema = z.object({
@@ -106,10 +107,25 @@ export const pipelineTask = task({
         factor: 2,
     },
     run: async (payload: z.infer<typeof requestSchema>) => {
+        // Initialize Supabase client without cookies
+        const supabase = createServerClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.SUPABASE_SERVICE_ROLE_KEY!,
+            {
+                auth: {
+                    persistSession: false
+                },
+                cookies: {
+                    get: () => undefined,
+                    set: () => {},
+                    remove: () => {},
+                }
+            }
+        );
+
         // Create an idempotency key based on unique attributes
         const idempotencyKey = `${payload.organization}-${payload.table_name}-${Date.now()}`;
         
-        const supabase = createClient();
         let syncId: string | null = null;
         let snowflakePool: any = null;
         let clickhouse: any = null;

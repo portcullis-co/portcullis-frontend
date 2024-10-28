@@ -20,6 +20,7 @@
   import { DropdownMenu } from './ui/dropdown-menu'
   import { Label } from './ui/label'
   import { encrypt, decrypt } from '@/lib/encryption';
+  import { runPipeline } from '@/app/actions/pipeline'
 
   interface Warehouse {
     id: string
@@ -35,7 +36,7 @@
     host: string; // Change from 'string | null' to 'string'
     url: string; // Change from 'string | null' to 'string'
     database: string;
-    port: string;
+    port: number;
     account: string;
     application: string;
     proxyHost: string;
@@ -110,7 +111,7 @@
       host: '',
       url: '',
       database: '',
-      port: '',
+      port: 8443,
       account: '',
       application: '',
       proxyHost: '',
@@ -144,130 +145,62 @@
     const appLogoRef = useRef<HTMLDivElement>(null)
     const destLogoRef = useRef<HTMLDivElement>(null)
 
-    const runPipeline = async (organization: string, destination: string) => {
-      const supabase = createClient();
-      const internal_warehouse = linkDetails?.internal_warehouse;
-    
-      if (!internal_warehouse) {
-        console.error('Internal warehouse is undefined');
-        throw new Error('Internal warehouse is undefined. Cannot fetch credentials.');
+    const handlePipelineStart = async () => {
+      try {
+        if (!linkDetails?.internal_warehouse || !selectedWarehouse?.name) {
+          throw new Error('Missing required warehouse information')
+        }
+
+        const result = await runPipeline(
+          linkDetails.organization,
+          linkDetails.internal_warehouse,
+          selectedWarehouse.name,
+          credentials
+        )
+
+        return {
+          status: 200,
+          data: result
+        }
+      } catch (error) {
+        console.error('Pipeline error:', error)
+        throw error
       }
-    
-      const { data: internalData, error: internalError } = await supabase
-        .from('warehouses')
-        .select('*')
-        .eq('id', internal_warehouse)
-        .maybeSingle();
-    
-      if (internalError || !internalData || !internalData.credentials) {
-        throw new Error('Failed to fetch warehouse data');
-      }
-    
-            // Format credentials based on warehouse type
-            const getFormattedCredentials = () => {
-              switch (selectedWarehouse?.name) {
-                case 'Clickhouse':
-                  return {
-                    username: credentials.username,
-                    password: credentials.password,
-                    host: credentials.host,
-                    database: credentials.database,
-                    // Only include port if it's provided
-                  };
-                case 'Snowflake':
-                  return {
-                    username: credentials.username,
-                    password: credentials.password,
-                    account: credentials.account,
-                    database: credentials.database,
-                    schema: credentials.schema,
-                    warehouse: credentials.warehouse,
-                  };
-                case 'BigQuery':
-                  return {
-                    projectId: credentials.projectId,
-                    keyFilename: credentials.keyFilename,
-                  };
-                case 'Postgres':
-                  return {
-                    username: credentials.username,
-                    password: credentials.password,
-                    host: credentials.host,
-                    port: parseInt(credentials.port, 10),
-                    database: credentials.database,
-                  };
-                default:
-                  throw new Error(`Unsupported warehouse type: ${selectedWarehouse?.name}`);
-              }
-            };
-      // Format credentials based on warehouse type
-      const formattedCredentials = getFormattedCredentials();
-    
-      // Decrypt the internal credentials
-      const decryptedInternalCreds = await decrypt(internalData.credentials);
-    
-      const requestBody = {
-        organization: linkDetails?.organization,
-        internal_warehouse,
-        link_type: selectedWarehouse?.name,
-        link_credentials: formattedCredentials, // Send as plain object, not encrypted
-        internal_credentials: decryptedInternalCreds,
-        table_name: internalData.table_name,
-      };
-    
-      console.log('Sending request to pipeline API:', JSON.stringify(requestBody, null, 2));
-    
-      const response = await fetch('/api/pipeline', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody),
-      });
-    
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Pipeline API failed with status ${response.status}: ${errorText}`);
-      }
-    
-      return {
-        status: response.status,
-        data: await response.json()
-      };
-    };
+    }
 
     const fetchLinkDetails = async (token: string): Promise<LinkDetails | null> => {
       console.log('fetchLinkDetails called with token:', token);
-      const supabase = createClient();
+      const supabase = createClient(); // This will use the client-side configuration
+      
       const { data, error } = await supabase
-          .from('links')
-          .select('logo, redirect_url, organization, internal_warehouse, encrypted_password')
-          .eq('invite_token', token)
-          .single();
+        .from('links')
+        .select('logo, redirect_url, organization, internal_warehouse, encrypted_password')
+        .eq('invite_token', token)
+        .single();
 
       if (error) {
-          console.error('Error fetching warehouse details:', error);
-          return null;
+        console.error('Error fetching warehouse details:', error);
+        return null;
       }
 
       console.log('Raw data from supabase:', data);
 
       if (!data) {
-          console.error('No data returned from supabase');
-          return null;
+        console.error('No data returned from supabase');
+        return null;
       }
 
       const details: LinkDetails = {
-          internal_warehouse: data.internal_warehouse,
-          organization: data.organization,
-          logo: data.logo,
-          redirect_url: data.redirect_url,
-          encrypted_password: data.encrypted_password,
+        internal_warehouse: data.internal_warehouse,
+        organization: data.organization,
+        logo: data.logo,
+        redirect_url: data.redirect_url,
+        encrypted_password: data.encrypted_password,
       };
 
       console.log('Returning link details:', details);
       return details;
-  };
+    };
 
     useEffect(() => {
       console.log('useEffect triggered. Token:', token);
@@ -366,8 +299,14 @@
     }, [step, selectedWarehouse, credentials, password]);
 
     const handleBack = () => {
-      if (step > 0) {
-        setStep(step - 1);
+      if (step === 0.5) {
+        setStep(0);
+      } else if (step === 1) {
+        setStep(0.5);
+      } else if (step === 2) {
+        setStep(1);
+      } else if (step === 3) {
+        setStep(2);
       }
     };
 
@@ -446,10 +385,7 @@
             }
           }
 
-          const result = await runPipeline(
-            linkDetails.organization,
-            selectedWarehouse.name,
-          );
+          const result = await handlePipelineStart();
           console.log('Pipeline execution result:', result);
           
           if (result.status === 200) {
