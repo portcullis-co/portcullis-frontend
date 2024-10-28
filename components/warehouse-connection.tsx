@@ -151,6 +151,7 @@
           throw new Error('Missing required warehouse information')
         }
 
+        // Start the pipeline using the server action
         const result = await runPipeline(
           linkDetails.organization,
           linkDetails.internal_warehouse,
@@ -791,4 +792,5 @@
       </Dialog>
     )
   }
+
 

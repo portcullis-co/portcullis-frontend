@@ -84,6 +84,7 @@ export async function runPipeline(
       }
     })
 
+    // Fetch warehouse data
     const { data: internalData, error: internalError } = await supabase
       .from('warehouses')
       .select('*')
@@ -94,11 +95,27 @@ export async function runPipeline(
       throw new Error('Failed to fetch warehouse data')
     }
 
+    // Create sync record
+    const { data: syncData, error: syncError } = await supabase
+      .from('syncs')
+      .insert({
+        organization: organization,
+        internal_warehouse: internal_warehouse,
+        table_name: internalData.table_name,
+        link_type: warehouseType,
+      })
+      .select()
+      .single()
+
+    if (syncError) {
+      throw new Error(`Failed to create sync record: ${syncError.message}`)
+    }
+
     const formattedCredentials = formatWarehouseCredentials(warehouseType, rawCredentials)
     const decryptedInternalCreds = await decrypt(internalData.credentials)
 
     const requestBody: PipelineRequestBody = {
-      organization: organization ?? '', // Provide empty string as fallback
+      organization: organization ?? '',
       internal_warehouse,
       link_type: warehouseType,
       link_credentials: formattedCredentials,
@@ -112,7 +129,8 @@ export async function runPipeline(
       success: true,
       message: "ETL process started",
       runId: handle.id,
-      status: 200  // Add explicit status code for consistency
+      syncId: syncData.id,
+      status: 200
     }
   } catch (error) {
     throw new Error(error instanceof Error ? error.message : 'Unknown error occurred')

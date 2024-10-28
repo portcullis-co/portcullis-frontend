@@ -107,26 +107,6 @@ export const pipelineTask = task({
         factor: 2,
     },
     run: async (payload: z.infer<typeof requestSchema>) => {
-        // Initialize Supabase client without cookies
-        const supabase = createServerClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.SUPABASE_SERVICE_ROLE_KEY!,
-            {
-                auth: {
-                    persistSession: false
-                },
-                cookies: {
-                    get: () => undefined,
-                    set: () => {},
-                    remove: () => {},
-                }
-            }
-        );
-
-        // Create an idempotency key based on unique attributes
-        const idempotencyKey = `${payload.organization}-${payload.table_name}-${Date.now()}`;
-        
-        let syncId: string | null = null;
         let snowflakePool: any = null;
         let clickhouse: any = null;
 
@@ -146,34 +126,6 @@ export const pipelineTask = task({
             const decryptedLinkCreds = typeof body.link_credentials === 'string'
                 ? await decrypt(body.link_credentials)
                 : body.link_credentials;
-
-            // Create sync record
-            const { data: syncData } = await retry.onThrow(
-                async () => {
-                    const { data, error } = await supabase
-                        .from('syncs')
-                        .insert({
-                            organization: body.organization,
-                            internal_warehouse: body.internal_warehouse,
-                            table_name: body.table_name,
-                            link_type: linkType,
-                            internal_credentials: decryptedInternalCreds,
-                            link_credentials: body.link_credentials,
-                        })
-                        .select()
-                        .single();
-                        
-                    if (error) throw error;
-                    return data;
-                },
-                { maxAttempts: 3 }
-            );
-
-            if (!syncData) {
-                throw new Error('Failed to create sync record: No data returned');
-            }
-
-            syncId = syncData.id;
 
             // Create ClickHouse client with retry
             clickhouse = await retry.onThrow(
@@ -309,7 +261,6 @@ export const pipelineTask = task({
 
             return {
                 success: true,
-                syncId,
                 processedCount,
                 message: `ETL process completed successfully. Processed ${processedCount} rows.`
             };
