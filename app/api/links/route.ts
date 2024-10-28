@@ -6,6 +6,18 @@ import { Resend } from 'resend';
 import { z } from 'zod';
 import { encrypt } from '@/lib/encryption';
 
+type Link = {
+  id: string;
+  invite_token: string;
+  internal_warehouse: string;
+  logo: string | null;
+  redirect_url: string | null;
+  recipient_email: string;
+  organization: string;
+  encrypted_password: string;
+  created_at: string;  // Make sure this exists
+};
+
 const resend = new Resend('re_CAiLvhVL_Hq6K3xEkCsqMAe77JS1m5Gdm');
 type CreateLinkInput = z.infer<typeof createLinkSchema>;
 
@@ -83,7 +95,17 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from('links')
-    .select('*')
+    .select(`
+      id,
+      invite_token,
+      internal_warehouse,
+      logo,
+      redirect_url,
+      recipient_email,
+      organization,
+      encrypted_password,
+      created_at
+    `)
     .eq('organization', orgId)
     .order('created_at', { ascending: false });
 
@@ -91,7 +113,13 @@ export async function GET() {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json(data);
+  // Transform the data to ensure dates are properly formatted
+  const formattedData = data?.map(link => ({
+    ...link,
+    createdAt: link.created_at, // Map created_at to createdAt for frontend consistency
+  }));
+
+  return NextResponse.json(formattedData);
 }
 
 export async function DELETE(request: Request) {
