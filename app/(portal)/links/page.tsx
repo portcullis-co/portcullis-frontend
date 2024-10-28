@@ -15,12 +15,12 @@ import crypto from 'crypto';
 type Link = {
   id: string;
   url: string;
-  createdAt: string;
+  createdAt: string;  // This should match the field name from the API
   imageUrl: string;
   redirectUrl: string;
   invite_token: string;
   internal_warehouse: string;
-  recipient_email?: string; // Add this line
+  recipient_email?: string;
 };
 
 
@@ -206,22 +206,42 @@ export default function InviteLinks() {
             <DialogTitle>Create New Invite Link</DialogTitle>
           </DialogHeader>
             <div className="space-y-4">
-              <Select value={selectedWarehouseId} onValueChange={setSelectedWarehouseId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a warehouse" />
-                </SelectTrigger>
-                <SelectContent>
-                  {warehouses.length > 0 ? (
-                    warehouses.map((warehouse) => (
-                      <SelectItem key={warehouse.id} value={warehouse.id}>
-                        {formatDate(warehouse.created_at)}
-                      </SelectItem>
-                    ))
+            <Select value={selectedWarehouseId} onValueChange={setSelectedWarehouseId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select a warehouse">
+                  {selectedWarehouseId ? (
+                    <div className="flex items-center gap-2">
+                      <img 
+                        src="https://cdn.brandfetch.io/idnezyZEJm/theme/dark/symbol.svg?k=bfHSJFAPEG"
+                        alt="Clickhouse Logo" 
+                        className="w-4 h-4"
+                      />
+                      <span>{selectedWarehouseId}</span>
+                    </div>
                   ) : (
-                    <SelectItem value="no-warehouses" disabled>No warehouses available</SelectItem>
+                    "Select a warehouse"
                   )}
-                </SelectContent>
-              </Select>
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {warehouses.length > 0 ? (
+                  warehouses.map((warehouse) => (
+                    <SelectItem key={warehouse.id} value={warehouse.id}>
+                      <div className="flex items-center gap-2">
+                        <img 
+                          src="https://cdn.brandfetch.io/idnezyZEJm/theme/dark/symbol.svg?k=bfHSJFAPEG"
+                          alt="Clickhouse Logo" 
+                          className="w-4 h-4"
+                        />
+                        <span>{warehouse.id}</span>
+                      </div>
+                    </SelectItem>
+                  ))
+                ) : (
+                  <SelectItem value="no-warehouses" disabled>No warehouses available</SelectItem>
+                )}
+              </SelectContent>
+            </Select>
               <Input
                 type="email"
                 value={recipientEmail}
