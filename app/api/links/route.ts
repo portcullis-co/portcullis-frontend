@@ -2,12 +2,28 @@ import { NextResponse } from 'next/server';
 import { nanoid } from 'nanoid';
 import { createClient } from '@/lib/supabase/server';
 import { auth } from '@clerk/nextjs/server';
+import { Resend } from 'resend';
+import { z } from 'zod';
+import { encrypt } from '@/lib/encryption';
+
+const resend = new Resend('re_CAiLvhVL_Hq6K3xEkCsqMAe77JS1m5Gdm');
+type CreateLinkInput = z.infer<typeof createLinkSchema>;
+
+const createLinkSchema = z.object({
+  organizationId: z.string().nonempty('Organization ID is required'),
+  imageUrl: z.string().url('Invalid image URL').optional(),
+  redirectUrl: z.string().url('Invalid redirect URL'),
+  internal_warehouse: z.string().nonempty('Warehouse selection is required'),
+  recipient_email: z.string().email('Invalid email address'),
+  domain: z.string().optional(),
+});
 
 export async function POST(request: Request) {
   try {
     const supabase = createClient();
     const { userId, orgId } = auth();
-    const { logo, redirectUrl, internal_warehouse, } = await request.json();
+    const { logo, redirectUrl, internal_warehouse, recipient_email, password } = await request.json();
+    const encrypted_password = await encrypt(password);
 
     if (!orgId) {
       return NextResponse.json({ error: 'Unauthorized: No organization ID' }, { status: 401 });
@@ -22,7 +38,9 @@ export async function POST(request: Request) {
         internal_warehouse,
         logo,
         redirect_url: redirectUrl,
-        organization: orgId
+        recipient_email,
+        organization: orgId,
+        encrypted_password: encrypted_password,
       })
       .select()
       .single();
@@ -30,6 +48,22 @@ export async function POST(request: Request) {
     if (error) {
       console.error('Supabase error:', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    const internal_logo = "https://portcullis-app.fly.dev/portcullis.svg"
+    // Send email using Resend
+    const emailHtml = ``;
+
+    try {
+      await resend.emails.send({
+        from: 'onboarding@resend.dev',
+        to: recipient_email,
+        subject: 'Confirm your email address',
+        html: emailHtml,
+      });
+    } catch (emailError) {
+      console.error('Error sending email:', emailError);
+      // Note: We're not returning here, as we still want to return the data even if email sending fails
     }
 
     return NextResponse.json(data);

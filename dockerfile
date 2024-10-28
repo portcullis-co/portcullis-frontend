@@ -1,6 +1,9 @@
 # Use an official Node.js runtime as the base image
 FROM node:18-alpine
 
+# Install pnpm
+RUN npm install -g pnpm
+
 # Set the working directory in the container
 WORKDIR /app
 
@@ -8,13 +11,13 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install the application dependencies
-RUN npm install
+RUN pnpm install
 
 # Copy the rest of the application code to the working directory
 COPY . .
 
 # Build the Next.js application
-RUN npm run build
+RUN pnpm run build
 
 # Expose the port that the application will run on
 EXPOSE 3000
@@ -27,4 +30,4 @@ RUN chmod +x /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]
 
 # Start the application
-CMD ["npm", "start"]
+CMD ["pnpm", "start"]

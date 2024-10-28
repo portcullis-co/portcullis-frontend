@@ -10,6 +10,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { Toaster } from "@/components/ui/toaster"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@clerk/nextjs"
+import crypto from 'crypto';
 
 type Link = {
   id: string;
@@ -19,19 +20,41 @@ type Link = {
   redirectUrl: string;
   invite_token: string;
   internal_warehouse: string;
+  recipient_email?: string; // Add this line
 };
 
-async function createInviteLink(imageUrl: string, redirectUrl: string, internal_warehouse: string,): Promise<Link> {
+
+async function createInviteLink(
+  organizationId: string,
+  imageUrl: string, 
+  redirectUrl: string, 
+  internal_warehouse: string,
+  recipient_email: string,
+  password: string,
+): Promise<Link> {
+  
   const response = await fetch('/api/links', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ logo: imageUrl, redirectUrl, internal_warehouse,}),
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      organization: organizationId,
+      logo: imageUrl, 
+      redirectUrl, 
+      internal_warehouse,
+      recipient_email,
+      password: password,
+    }),
   });
   if (!response.ok) {
     const errorData = await response.json();
+    console.error('Server error:', errorData);
     throw new Error(errorData.error || 'Failed to create invite link');
   }
-  return response.json();
+  const data = await response.json();
+  console.log('Server response:', data);
+  return data;
 }
 
 async function fetchInviteLinks() {
@@ -62,7 +85,7 @@ async function fetchWarehouses(organizationId: string) {
 
 export default function InviteLinks() {
   const { organization } = useOrganization();
-  const organizationId = organization?.id;
+  const organizationId = organization?.id || '';
   const [links, setLinks] = useState<Link[]>([]);
   const [warehouses, setWarehouses] = useState<Array<{ id: string; created_at: string }>>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -71,6 +94,8 @@ export default function InviteLinks() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const imageUrl = useOrganization().organization?.imageUrl;
   const { toast } = useToast()
+  const [recipientEmail, setRecipientEmail] = useState(''); // Add this line
+  const [password, setPassword] = useState('');
 
   useEffect(() => {
     loadLinks();
@@ -116,14 +141,26 @@ export default function InviteLinks() {
   const handleCreateLink = async () => {
     setIsLoading(true);
     try {
-      const newLink = await createInviteLink(imageUrl || '', redirectUrl, selectedWarehouseId);
-      
+      if (!organization || !organization.id) {
+        throw new Error('No organization ID available');
+      }
+  
+      const newLink = await createInviteLink(
+        organizationId,
+        imageUrl || '',
+        redirectUrl,
+        selectedWarehouseId,
+        recipientEmail,
+        password
+      );
+  
       if (newLink && newLink.invite_token) {
         const copyableLink = `${window.location.origin}/invite/${newLink.invite_token}`;
         setLinks((prevLinks) => [newLink, ...prevLinks]);
         showToast('Invite link created successfully', 'success');
         setRedirectUrl('');
         setSelectedWarehouseId('');
+        setRecipientEmail('');
         setIsDialogOpen(false);
       } else {
         throw new Error('Invalid response from server');
@@ -131,8 +168,9 @@ export default function InviteLinks() {
     } catch (error) {
       console.error('Error creating invite link:', error);
       showToast('Failed to create invite link', 'error');
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   const handleDeleteLink = async (id: string) => {
@@ -167,38 +205,56 @@ export default function InviteLinks() {
           <DialogHeader>
             <DialogTitle>Create New Invite Link</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
-            <Select value={selectedWarehouseId} onValueChange={setSelectedWarehouseId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select a warehouse" />
-              </SelectTrigger>
-              <SelectContent>
-                {warehouses.length > 0 ? (
-                  warehouses.map((warehouse) => (
-                    <SelectItem key={warehouse.id} value={warehouse.id}>
-                      {formatDate(warehouse.created_at)}
-                    </SelectItem>
-                  ))
-                ) : (
-                  <SelectItem value="no-warehouses" disabled>No warehouses available</SelectItem>
-                )}
-              </SelectContent>
-            </Select>
-            <Input
-              value={redirectUrl}
-              onChange={(e) => setRedirectUrl(e.target.value)}
-              placeholder="Enter redirect URL"
-            />
-            <Button onClick={handleCreateLink} disabled={isLoading}>
-              {isLoading ? 'Creating...' : 'Create Invite Link'}
-            </Button>
-          </div>
+            <div className="space-y-4">
+              <Select value={selectedWarehouseId} onValueChange={setSelectedWarehouseId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a warehouse" />
+                </SelectTrigger>
+                <SelectContent>
+                  {warehouses.length > 0 ? (
+                    warehouses.map((warehouse) => (
+                      <SelectItem key={warehouse.id} value={warehouse.id}>
+                        {formatDate(warehouse.created_at)}
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <SelectItem value="no-warehouses" disabled>No warehouses available</SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+              <Input
+                type="email"
+                value={recipientEmail}
+                onChange={(e) => setRecipientEmail(e.target.value)}
+                placeholder="Enter recipient's email"
+                required
+              />
+              <Input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter password for the invite link"
+                required
+              />
+              <Input
+                value={redirectUrl}
+                onChange={(e) => setRedirectUrl(e.target.value)}
+                placeholder="Enter redirect URL"
+              />
+              <Button 
+                onClick={handleCreateLink} 
+                disabled={isLoading || !recipientEmail || !selectedWarehouseId || !password}
+              >
+                {isLoading ? 'Creating...' : 'Create Invite Link'}
+              </Button>
+            </div>
         </DialogContent>
       </Dialog>
       <Table>
         <TableHeader>
           <TableRow>
             <TableHead>Invite Link</TableHead>
+            <TableHead>Recipient</TableHead>
             <TableHead>Created</TableHead>
             <TableHead>Actions</TableHead>
           </TableRow>
@@ -209,6 +265,7 @@ export default function InviteLinks() {
               <TableCell>
                 <CopyLinkInput link={`${window.location.origin}/invite/${row.invite_token}`} />
               </TableCell>
+              <TableCell>{row.recipient_email}</TableCell>
               <TableCell>{formatDate(row.createdAt)}</TableCell>
               <TableCell>
                 <Button 

@@ -7,9 +7,9 @@ const isPublicRoute = createRouteMatcher([
   '/auth/(.*)',
   '/pricing',
   '/privacy',
-  '/portal/(.*)',
   '/sign-up',
   '/sign-in',
+  '/invite/(.*)',
   '/syncs/(.*)',
   '/terms',
   '/api/(.*)',
@@ -17,18 +17,22 @@ const isPublicRoute = createRouteMatcher([
 ]);
 
 const allowedRoutes = [
+  '/',
   '/home',
   '/auth',
   '/api/(.*)',
   '/api/webhooks(.*)',
   '/api/warehouses(.*)',
+  '/links',
+  '/api/pipeline',
   '/api/links/(.*)',
   '/api/links',
   '/api/warehouses',
+  '/create-organization',
   '/api/syncs',
   '/api/check-connection',
   '/syncs/(.*)',
-  '/import/lDF3tpEADq',
+  '/invite/(.*)',
   '/warehouses',
   '/sign-in',
   '/sign-up',
@@ -39,6 +43,7 @@ const allowedRoutes = [
 
 const allowedOrigins = [
   'http://localhost:3000',
+  'https://portcullis-app.fly.dev',
 ];
 
 function corsMiddleware(request: NextRequest, response: NextResponse) {
@@ -64,10 +69,6 @@ export default clerkMiddleware(async (auth, req) => {
   const isAllowedRoute = allowedRoutes.some(route => pathname.startsWith(route));
 
   console.log(`Request to ${pathname} - isAllowedRoute: ${isAllowedRoute}`);
-  // Only redirect to HTTPS in production
-  if (process.env.NODE_ENV === 'production' && req.headers.get('x-forwarded-proto') !== 'https') {
-    return NextResponse.redirect(`https://${req.headers.get('host')}${req.nextUrl.pathname}`, 301);
-  }
   
   if (!isPublicRoute(req)) {
     const { userId } = auth();

@@ -17,7 +17,10 @@
   import { DataWarehouseForm } from "@/components/data-warehouse-form"; // Import the DataWarehouseForm
   import { toast, useToast } from '@/hooks/use-toast'
   import { Toaster } from './ui/toaster'
-import { DropdownMenu } from './ui/dropdown-menu'
+  import { DropdownMenu } from './ui/dropdown-menu'
+  import { Label } from './ui/label'
+  import { encrypt, decrypt } from '@/lib/encryption';
+  import { runPipeline } from '@/app/actions/pipeline'
 
   interface Warehouse {
     id: string
@@ -33,7 +36,7 @@ import { DropdownMenu } from './ui/dropdown-menu'
     host: string; // Change from 'string | null' to 'string'
     url: string; // Change from 'string | null' to 'string'
     database: string;
-    port: string;
+    port: number;
     account: string;
     application: string;
     proxyHost: string;
@@ -58,6 +61,7 @@ import { DropdownMenu } from './ui/dropdown-menu'
     redirect_url: string;
     internal_warehouse: string;
     organization: string;
+    encrypted_password: string;
   }
 
   interface Destination {
@@ -99,163 +103,104 @@ import { DropdownMenu } from './ui/dropdown-menu'
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState(false);
-    const [credentials, setCredentials] = useState<Credentials>({
-      username: "",
-      password: "",
-      account: "",
-      port: "",
-      host: "",
-      url: "",
-      protocol: "",
-      database: "",
-      application: "",
-      proxyHost: "",
-      schema: "",
-      accessUrl: "",
-      authenticator: "",
-      warehouse: "",
-      projectId: "",
-      keyFilename: "",
-      path: "",
-    });
+    const [password, setPassword] = useState('');
+    const [passwordError, setPasswordError] = useState('');
+    const defaultCredentials: Credentials = {
+      username: '',
+      password: '',
+      host: '',
+      url: '',
+      database: '',
+      port: 8443,
+      account: '',
+      application: '',
+      proxyHost: '',
+      schema: '',
+      protocol: '',
+      accessUrl: '',
+      authenticator: '',
+      warehouse: '',
+      projectId: '',
+      keyFilename: '',
+      path: '',
+    }  
+    const [credentials, setCredentials] = useState<Credentials>(defaultCredentials)
+    const [session, setSession] = useState(() => {
+      if (typeof window !== 'undefined') {
+        const savedSession = localStorage.getItem('warehouseConnectionSession')
+        if (savedSession) {
+          const parsed = JSON.parse(savedSession)
+          // Ensure credentials are properly initialized from session
+          return {
+            ...parsed,
+            credentials: { ...defaultCredentials, ...parsed.credentials }
+          }
+        }
+      }
+      return null
+    })
 
     const containerRef = useRef<HTMLDivElement>(null)
     const linkLogoRef = useRef<HTMLDivElement>(null)
     const appLogoRef = useRef<HTMLDivElement>(null)
     const destLogoRef = useRef<HTMLDivElement>(null)
 
-    const runPipeline = async (organization: string, destination: string) => {
-      const supabase = createClient();
-      const internal_warehouse = linkDetails?.internal_warehouse;
-    
-      if (!internal_warehouse) {
-        console.error('Internal warehouse is undefined');
-        throw new Error('Internal warehouse is undefined. Cannot fetch credentials.');
-      }
-    
-      const { data: internalData, error: internalError } = await supabase
-        .from('warehouses')
-        .select('*')
-        .eq('id', internal_warehouse)
-        .maybeSingle();
-    
-      if (internalError) {
-        console.error('Error fetching warehouse:', internalError);
-        throw new Error(`Failed to fetch warehouse: ${internalError.message}`);
-      }
-    
-      if (!internalData) {
-        console.error('No data found for warehouse ID:', internal_warehouse);
-        throw new Error(`No data found for warehouse ID: ${internal_warehouse}`);
-      }
-    
-      if (!internalData.credentials) {
-        console.error('Credentials are missing in the warehouse data');
-        throw new Error('Credentials are missing in the warehouse data');
-      }
-    
-      // Format credentials based on warehouse type
-      const getFormattedCredentials = () => {
-        switch (selectedWarehouse?.name) {
-          case 'Clickhouse':
-            return {
-              username: credentials.username,
-              password: credentials.password,
-              host: credentials.host,
-              database: credentials.database,
-              // Only include port if it's provided
-            };
-          case 'Snowflake':
-            return {
-              username: credentials.username,
-              password: credentials.password,
-              account: credentials.account,
-              database: credentials.database,
-              schema: credentials.schema,
-              warehouse: credentials.warehouse,
-            };
-          case 'BigQuery':
-            return {
-              projectId: credentials.projectId,
-              keyFilename: credentials.keyFilename,
-            };
-          case 'Postgres':
-            return {
-              username: credentials.username,
-              password: credentials.password,
-              host: credentials.host,
-              port: parseInt(credentials.port, 10),
-              database: credentials.database,
-            };
-          default:
-            throw new Error(`Unsupported warehouse type: ${selectedWarehouse?.name}`);
+    const handlePipelineStart = async () => {
+      try {
+        if (!linkDetails?.internal_warehouse || !selectedWarehouse?.name) {
+          throw new Error('Missing required warehouse information')
         }
-      };
-    
-    
-      const requestBody = {
-        organization: linkDetails?.organization,
-        internal_warehouse: internal_warehouse,
-        link_type: selectedWarehouse?.name,
-        link_credentials: credentials,
-        internal_credentials: internalData.credentials,
-        table_name: internalData.table_name,
-      };
-    
-      console.log('Sending request to pipeline API:', JSON.stringify(requestBody, null, 2));
-    
-      const response = await fetch('/api/pipeline', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody),
-      });
-    
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Pipeline API error:', errorText);
-        throw new Error(`Pipeline API failed with status ${response.status}: ${errorText}`);
+
+        const result = await runPipeline(
+          linkDetails.organization,
+          linkDetails.internal_warehouse,
+          selectedWarehouse.name,
+          credentials
+        )
+
+        return {
+          status: 200,
+          data: result
+        }
+      } catch (error) {
+        console.error('Pipeline error:', error)
+        throw error
       }
-    
-      const result = await response.json();
-      return {
-        status: response.status,
-        data: result
-      };
-    };
+    }
 
     const fetchLinkDetails = async (token: string): Promise<LinkDetails | null> => {
       console.log('fetchLinkDetails called with token:', token);
-      const supabase = createClient();
+      const supabase = createClient(); // This will use the client-side configuration
+      
       const { data, error } = await supabase
-          .from('links')
-          .select('logo, redirect_url, organization, internal_warehouse')
-          .eq('invite_token', token)
-          .single();
+        .from('links')
+        .select('logo, redirect_url, organization, internal_warehouse, encrypted_password')
+        .eq('invite_token', token)
+        .single();
 
       if (error) {
-          console.error('Error fetching warehouse details:', error);
-          return null;
+        console.error('Error fetching warehouse details:', error);
+        return null;
       }
 
       console.log('Raw data from supabase:', data);
 
       if (!data) {
-          console.error('No data returned from supabase');
-          return null;
+        console.error('No data returned from supabase');
+        return null;
       }
 
       const details: LinkDetails = {
-          internal_warehouse: data.internal_warehouse,
-          organization: data.organization,
-          logo: data.logo,
-          redirect_url: data.redirect_url,
+        internal_warehouse: data.internal_warehouse,
+        organization: data.organization,
+        logo: data.logo,
+        redirect_url: data.redirect_url,
+        encrypted_password: data.encrypted_password,
       };
 
       console.log('Returning link details:', details);
       return details;
-  };
+    };
 
     useEffect(() => {
       console.log('useEffect triggered. Token:', token);
@@ -290,8 +235,32 @@ import { DropdownMenu } from './ui/dropdown-menu'
           setError('No token provided. Unable to fetch link details.');
         }
       };
+      if (session) {
+        setStep(session.step)
+        setSelectedWarehouse(session.selectedWarehouse)
+        setCredentials({ ...defaultCredentials, ...session.credentials })
+        setPassword(session.password)
+      }
       getLinkDetails();
-    }, [token]);
+    }, [token, session]);
+
+    useEffect(() => {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('warehouseConnectionSession', JSON.stringify({
+          step,
+          selectedWarehouse,
+          credentials,
+          password,
+        }))
+      }
+    }, [step, selectedWarehouse, credentials, password])
+
+    const handleCredentialsChange = (field: keyof Credentials, value: string) => {
+      setCredentials(prev => ({
+        ...prev,
+        [field]: value
+      }))
+    }
     
     const filteredWarehouses = warehouses.filter((wh) => 
       wh.name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -304,11 +273,68 @@ import { DropdownMenu } from './ui/dropdown-menu'
       return null
     }
 
+    const verifyPassword = async (enteredPassword: string): Promise<boolean> => {
+      try {
+        if (!linkDetails?.encrypted_password) {
+          throw new Error('Encrypted password is missing from link details');
+        }
+        
+        const decryptedPassword = await decrypt(linkDetails.encrypted_password);
+        return decryptedPassword === enteredPassword;
+      } catch (error) {
+        console.error('Error verifying password:', error);
+        throw new Error('Failed to verify password');
+      }
+    };
+
+    useEffect(() => {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('warehouseConnectionSession', JSON.stringify({
+          step,
+          selectedWarehouse,
+          credentials,
+          password,
+        }));
+      }
+    }, [step, selectedWarehouse, credentials, password]);
+
+    const handleBack = () => {
+      if (step === 0.5) {
+        setStep(0);
+      } else if (step === 1) {
+        setStep(0.5);
+      } else if (step === 2) {
+        setStep(1);
+      } else if (step === 3) {
+        setStep(2);
+      }
+    };
+
     const handleContinue = async () => {
-      console.log('handleContinue called, current step:', step);
-      console.log('Current linkDetails:', linkDetails);
-      
-      if (step < 2) {
+      if (step === 0) {
+        setStep(0.5);
+        return;
+      }
+      if (step === 0.5) {
+        try {
+          if (!password) {
+            setPasswordError('Password is required');
+            return;
+          }
+          
+          const isVerified = await verifyPassword(password);
+          if (isVerified) {
+            setStep(1);
+            setPasswordError('');
+          } else {
+            setPasswordError('Invalid password. Please try again.');
+          }
+        } catch (error) {
+          console.error('Password verification error:', error);
+          setPasswordError('Failed to verify password. Please try again.');
+        }
+        return;
+      } else if (step < 2) {
         setStep(step + 1);
       } else if (step === 2) {
         if (!linkDetails) {
@@ -332,7 +358,7 @@ import { DropdownMenu } from './ui/dropdown-menu'
             requiredFields = ['username', 'password', 'host', 'database'];
             break;
           case 'Snowflake':
-            requiredFields = ['username', 'password', 'database', 'schema'];
+            requiredFields = ['account', 'username', 'password', 'database', 'schema'];
             break;
           default:
             throw new Error('Unsupported warehouse type');
@@ -356,13 +382,10 @@ import { DropdownMenu } from './ui/dropdown-menu'
         if (selectedWarehouse.name === 'Snowflake' && credentials.account) {
           if (credentials.account.includes('.snowflakecomputing.com')) {
             throw new Error('Please enter only your account identifier without the snowflakecomputing.com domain');
+            }
           }
-        }
 
-          const result = await runPipeline(
-            linkDetails.organization,
-            selectedWarehouse.name,
-          );
+          const result = await handlePipelineStart();
           console.log('Pipeline execution result:', result);
           
           if (result.status === 200) {
@@ -372,6 +395,7 @@ import { DropdownMenu } from './ui/dropdown-menu'
             throw new Error(`Pipeline execution failed with status ${result.status}`);
           }
         } catch (error: unknown) {
+          
           console.error('Failed to set up import:', error);
           if (error instanceof Error) {
             setError(error.message || 'Failed to set up import. Please try again.');
@@ -386,11 +410,10 @@ import { DropdownMenu } from './ui/dropdown-menu'
       }
     };
 
-    const handleOAuthAuthorization = () => {
-      if (selectedDestination && selectedDestination.oauthUrl) {
-        window.open(selectedDestination.oauthUrl, '_blank', 'width=600,height=600')
-      }
-    }
+    const clearSession = () => {
+      localStorage.removeItem('warehouseConnectionSession');
+      setSession(null);
+    };
 
     const renderWarehouseFields = () => {
       if (!selectedWarehouse) return null;
@@ -424,32 +447,32 @@ import { DropdownMenu } from './ui/dropdown-menu'
           );
         case 'Snowflake':
           return (
-            <>
-            <Input
-              placeholder="Account"
-              value={credentials.account ?? ''}
-              onChange={(e) => setCredentials({ ...credentials, account: e.target.value })}
-            />
+          <>
+              <Input
+                placeholder="Account"
+                value={credentials.account}
+                onChange={(e) => handleCredentialsChange('account', e.target.value)}
+              />
               <Input 
                 placeholder="Database"
-                value={credentials.database ?? ''}
-                onChange={(e) => setCredentials({...credentials, database: e.target.value})}
+                value={credentials.database}
+                onChange={(e) => handleCredentialsChange('database', e.target.value)}
               />
               <Input 
                 placeholder="Schema"
-                value={credentials.schema ?? ''}
-                onChange={(e) => setCredentials({...credentials, schema: e.target.value})}
+                value={credentials.schema}
+                onChange={(e) => handleCredentialsChange('schema', e.target.value)}
               />
               <Input 
                 placeholder="Username"
-                value={credentials.username ?? ''}
-                onChange={(e) => setCredentials({...credentials, username: e.target.value})}
+                value={credentials.username}
+                onChange={(e) => handleCredentialsChange('username', e.target.value)}
               />
               <Input 
                 placeholder="Password"
-                type="password" 
-                value={credentials.password ?? ''}
-                onChange={(e) => setCredentials({...credentials, password: e.target.value})}
+                type="password"
+                value={credentials.password}
+                onChange={(e) => handleCredentialsChange('password', e.target.value)}
               />
             </>
           );
@@ -459,33 +482,33 @@ import { DropdownMenu } from './ui/dropdown-menu'
                 <Input 
                   placeholder="Host"
                   value={credentials.host ?? ''}
-                  onChange={(e) => setCredentials({...credentials, account: e.target.value})}
+                  onChange={(e) => handleCredentialsChange('host', e.target.value)}
                 />
                 <Input 
                   type="Port" 
                   placeholder="Port"
                   value={credentials.port ?? ''}
-                  onChange={(e) => setCredentials({...credentials, port: e.target.value})}
+                  onChange={(e) => handleCredentialsChange('port', e.target.value)}
                 />
                 <Input 
                   placeholder="Database"
                   value={credentials.database ?? ''}
-                  onChange={(e) => setCredentials({...credentials, database: e.target.value})}
+                  onChange={(e) => handleCredentialsChange('database', e.target.value)}
                 />
                 <Input 
                   placeholder="Schema"
                   value={credentials.schema ?? ''}
-                  onChange={(e) => setCredentials({...credentials, schema: e.target.value})}
+                  onChange={(e) => handleCredentialsChange('schema', e.target.value)}
                 />
                 <Input 
                   placeholder="Username"
                   value={credentials.username ?? ''}
-                  onChange={(e) => setCredentials({...credentials, username: e.target.value})}
+                  onChange={(e) => handleCredentialsChange('username', e.target.value)}
                 />
                 <Input 
                   placeholder="Password"
                   value={credentials.password ?? ''}
-                  onChange={(e) => setCredentials({...credentials, password: e.target.value})}
+                  onChange={(e) => handleCredentialsChange('password', e.target.value)}
                 />
               </>
             );
@@ -495,33 +518,33 @@ import { DropdownMenu } from './ui/dropdown-menu'
                   <Input 
                     placeholder="Host"
                     value={credentials.host ?? ''}
-                    onChange={(e) => setCredentials({...credentials, account: e.target.value})}
+                    onChange={(e) => handleCredentialsChange('host', e.target.value)}
                   />
                   <Input 
                     type="Port" 
                     placeholder="Port"
                     value={credentials.port ?? ''}
-                    onChange={(e) => setCredentials({...credentials, port: e.target.value})}
+                    onChange={(e) => handleCredentialsChange('port', e.target.value)}
                   />
                   <Input 
                     placeholder="Database"
                     value={credentials.database ?? ''}
-                    onChange={(e) => setCredentials({...credentials, database: e.target.value})}
+                    onChange={(e) => handleCredentialsChange('database', e.target.value)}
                   />
                   <Input 
                     placeholder="Schema"
                     value={credentials.schema ?? ''}
-                    onChange={(e) => setCredentials({...credentials, schema: e.target.value})}
+                    onChange={(e) => handleCredentialsChange('schema', e.target.value)}
                   />
                   <Input 
                     placeholder="Username"
                     value={credentials.username ?? ''}
-                    onChange={(e) => setCredentials({...credentials, username: e.target.value})}
+                    onChange={(e) => handleCredentialsChange('username', e.target.value)}
                   />
                   <Input 
                     placeholder="Password"
                     value={credentials.password ?? ''}
-                    onChange={(e) => setCredentials({...credentials, password: e.target.value})}
+                    onChange={(e) => handleCredentialsChange('password', e.target.value)}
                   />
                 </>
               );
@@ -588,6 +611,11 @@ import { DropdownMenu } from './ui/dropdown-menu'
     )
 
     const renderStep = () => {
+      const BackButton = () => (
+        <Button onClick={handleBack} variant="outline" className="mr-2">
+          Back
+        </Button>
+      );
       switch (step) {
         case 0:
           return (
@@ -617,6 +645,40 @@ import { DropdownMenu } from './ui/dropdown-menu'
               </CardFooter>
             </Card>
           )
+
+          case 0.5:
+            return (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Enter Password</CardTitle>
+                  <CardDescription>Please enter the password to access this invite link.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    <Label htmlFor="password">Password</Label>
+                    <Input
+                      id="password"
+                      type="password"
+                      value={password}
+                      onChange={(e) => {
+                        setPassword(e.target.value);
+                        setPasswordError('');
+                      }}
+                      className={passwordError ? 'border-red-500' : ''}
+                    />
+                    {passwordError && (
+                      <p className="text-red-500 text-sm">{passwordError}</p>
+                    )}
+                  </div>
+                </CardContent>
+                <CardFooter className="flex justify-between">
+                  <BackButton />
+                  <Button onClick={handleContinue} className="w-full ml-2">
+                    Verify Password
+                  </Button>
+                </CardFooter>
+              </Card>
+            );
           case 1:
             return (
               <Card>
@@ -648,7 +710,10 @@ import { DropdownMenu } from './ui/dropdown-menu'
                     ))}
                   </ul>
                 </CardContent>
-              </Card>
+                <CardFooter>
+            <BackButton />
+          </CardFooter>
+        </Card>
             )
             case 2:
               return (
@@ -659,37 +724,51 @@ import { DropdownMenu } from './ui/dropdown-menu'
                     handleContinue();
                   }} className="space-y-4">
                     {renderWarehouseFields()}
-                    <Button type="submit" className="w-full">
-                      {isLoading ? 'Connecting...' : 'Connect'}
-                    </Button>
+                    <div className="flex justify-between">
+                      <BackButton />
+                      <Button type="submit" className="w-full ml-2">
+                        {isLoading ? 'Connecting...' : 'Connect'}
+                      </Button>
+                    </div>
                     {error && <p className="text-red-500 mt-2">{error}</p>}
                   </form>
                 </div>
-              )
-
-    
+              );
+            
             case 3:
               return (
-                <div className="p-6 text-center">
-                  {isLoading ? (
-                    <p>Setting up your connection...</p>
-                  ) : error ? (
-                    <div>
-                      <p className="text-red-500">{error}</p>
-                      <Button onClick={() => setStep(3)} className="mt-4">Try Again</Button>
+                <Card className="max-w-lg mx-auto">
+                  <CardHeader>
+                    <div className="flex items-center justify-center mb-4">
+                      <CheckCircle className="h-12 w-12 text-green-500" />
                     </div>
-                  ) : (
-                    <>
-                      <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
-                      <h2 className="text-2xl font-bold mb-4">Success!</h2>
-                      <p className="mb-6">Your {selectedWarehouse?.name} has been connected and the ETL job has been set up.</p>
-                      <Button onClick={onClose || (() => console.log('Connection completed'))} className="w-full">
-                        Finish
-                      </Button>
-                    </>
-                  )}
-                </div>
-              )
+                    <CardTitle className="text-center">Connection Successful!</CardTitle>
+                    <CardDescription className="text-center">
+                      Your {selectedWarehouse?.name} warehouse has been connected and the ETL pipeline is running.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div className="bg-green-50 p-4 rounded-md">
+                        <p className="text-sm text-green-700">
+                          Data synchronization has started. You can close this window and monitor the progress in your dashboard.
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                  <CardFooter className="flex justify-center">
+                    <Button 
+                      onClick={() => {
+                        clearSession();
+                        onClose?.();
+                      }}
+                      className="w-full"
+                    >
+                      Close
+                    </Button>
+                  </CardFooter>
+                </Card>
+              );
         }
       }
 
@@ -708,6 +787,8 @@ import { DropdownMenu } from './ui/dropdown-menu'
             {renderStep()}
           </div>
         </DialogContent>
+        <Toaster />
       </Dialog>
     )
   }
+

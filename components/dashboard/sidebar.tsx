@@ -1,5 +1,5 @@
 "use client"
-import React from 'react'
+import React, { useState } from 'react'
 import Link from 'next/link'
 import { Home, Database, ArrowRightLeft, Settings, PlusCircle } from 'lucide-react'
 import Logo from "@/public/portcullis.svg"
@@ -13,13 +13,25 @@ interface SidebarProps {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ openWarehouseConnection, openAppsConnection }) => {
+  const [isOpen, setIsOpen] = useState(false);
   const router = useRouter();
+
   return (
-    <div className="bg-grey border text-black w-64 space-y-6 py-7 px-2 absolute inset-y-0 left-0 transform -translate-x-full md:relative md:translate-x-0 transition duration-200 ease-in-out flex flex-col">
-      <div className="flex items-center space-x-2 px-4">
-        <Logo width={32} height={32} />
-        <span className="text-2xl font-extrabold">Portcullis</span>
+    <>
+      <button
+        className="md:hidden fixed top-4 left-4 z-20 p-2 bg-gray-800 text-white rounded-md"
+        onClick={() => setIsOpen(!isOpen)}
+      >
+        {isOpen ? 'Close' : 'Menu'}
+      </button>
+      <div className={`bg-grey border text-black w-64 space-y-6 py-7 px-2 absolute inset-y-0 left-0 transform ${isOpen ? 'translate-x-0' : '-translate-x-full'} md:relative md:translate-x-0 transition duration-200 ease-in-out flex flex-col z-10`}>
+      <div className="flex items-center justify-start px-4 space-x-3">
+        <Logo className="w-10 h-10" />
+        <span className="text-3xl font-bold tracking-tight">Portcullis</span>
       </div>
+      
+      <div className="h-px bg-gray-300 mx-4"></div>
+      
       <nav className="flex-grow">
         <Link href="/" className="block py-2.5 px-4 rounded transition duration-200 hover:bg-gray-800 hover:text-white">
           <Home className="inline-block mr-2" size={20} />
@@ -61,6 +73,7 @@ const Sidebar: React.FC<SidebarProps> = ({ openWarehouseConnection, openAppsConn
         />
       </div>
     </div>
+    </>
   )
 }
 

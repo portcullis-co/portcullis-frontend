@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { table } from 'console';
+import Image from 'next/image';
 
 interface Warehouse {
   organization: string;
@@ -38,8 +39,6 @@ interface ClickhouseCredentials {
   username: string;
   password: string;
 }
-
-const CLICKHOUSE_LOGO = `<img src="https://cdn.brandfetch.io/idnezyZEJm/theme/dark/symbol.svg?k=bfHSJFAPEG" alt="Clickhouse Logo" width="30" height="30" />`;
 
 export default function InternalWarehouseListPage() {
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
@@ -184,32 +183,39 @@ export default function InternalWarehouseListPage() {
       });
       return;
     }
-
+  
     try {
       const orgId = organization?.id;
       if (!orgId) {
         throw new Error('Organization ID is not available');
       }
-
+  
+      const encryptedCredentials = {
+        host: newWarehouse.credentials.host,
+        database: newWarehouse.credentials.database,
+        username: newWarehouse.credentials.username,
+        password: newWarehouse.credentials.password,
+      };
+  
       const response = await fetch('/api/warehouses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           organization: orgId,
           internal_type: 'clickhouse',
-          credentials: newWarehouse.credentials,
-          table_name: selectedTable, // Include the selected table
+          credentials: encryptedCredentials,
+          table_name: selectedTable,
         }),
       });
-
+  
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Failed to add warehouse');
       }
-
+  
       const data = await response.json();
       setWarehouses([...warehouses, data]);
-      setIsDialogOpen(false); // Close the dialog after successful addition
+      setIsDialogOpen(false);
       setNewWarehouse({
         credentials: {
           host: '',
@@ -218,7 +224,8 @@ export default function InternalWarehouseListPage() {
           password: '',
         }
       });
-      setSelectedTable(null); // Reset selected table
+      setSelectedTable(null);
+      setIsTableSelectionStep(false);
       toast({
         title: "Clickhouse Warehouse Connected",
         description: "Your Clickhouse warehouse has been successfully connected.",
@@ -243,7 +250,8 @@ export default function InternalWarehouseListPage() {
     <div className="max-w-4xl mx-auto p-6">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <div className="mb-2" dangerouslySetInnerHTML={{ __html: CLICKHOUSE_LOGO }} />
+          <div className="mb-2" />
+          <Image src="/clickhouse.svg" alt="Clickhouse Logo" width={30} height={30} />
           <h1 className="text-3xl font-bold">Clickhouse Connection Manager</h1>
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -252,7 +260,8 @@ export default function InternalWarehouseListPage() {
           </DialogTrigger>
           <DialogContent className="sm:max-w-[500px]">
             <DialogHeader>
-              <div className="mb-4" dangerouslySetInnerHTML={{ __html: CLICKHOUSE_LOGO }} />
+              <div className="mb-4" />
+              <Image src="/clickhouse.svg" alt="Clickhouse Logo" width={30} height={30} />
               <DialogTitle>{isTableSelectionStep ? "Select a Table" : "Connect to Clickhouse"}</DialogTitle>
               <DialogDescription>
                 {isTableSelectionStep
@@ -325,8 +334,10 @@ export default function InternalWarehouseListPage() {
       ) : error ? (
         <p className="text-red-500">{error}</p>
       ) : (
-        <div className="bg-white shadow-md rounded-lg overflow-hidden">
-          <table className="min-w-full">
+        <div className="space-y-6">
+        <h1 className="text-2xl md:text-3xl font-semibold">Internal Warehouses</h1>
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-100">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Connection ID</th>
@@ -366,6 +377,7 @@ export default function InternalWarehouseListPage() {
               )}
             </tbody>
           </table>
+        </div>
         </div>
       )}
       <Toaster />
