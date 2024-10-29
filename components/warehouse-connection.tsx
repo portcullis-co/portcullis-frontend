@@ -55,6 +55,7 @@
   interface WarehouseConnectionProps {
     token?: string;
     onClose?: () => void;  // Add this line
+    id?: string;
   }
 
   interface LinkDetails {

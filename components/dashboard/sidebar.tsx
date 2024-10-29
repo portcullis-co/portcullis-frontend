@@ -1,7 +1,7 @@
 "use client"
 import React, { useState } from 'react'
 import Link from 'next/link'
-import { Home, Database, ArrowRightLeft, Settings, PlusCircle } from 'lucide-react'
+import { Home, Database, ArrowRightLeft, Settings, PlusCircle, CreditCard } from 'lucide-react'
 import Logo from "@/public/portcullis.svg"
 import { Button } from '@/components/ui/button'
 import { useRouter } from 'next/navigation';
@@ -48,6 +48,10 @@ const Sidebar: React.FC<SidebarProps> = ({ openWarehouseConnection, openAppsConn
         <Link href="/settings" className="block py-2.5 px-4 rounded transition duration-200 hover:bg-gray-800 hover:text-white">
           <Settings className="inline-block mr-2" size={20} />
           Settings
+        </Link>
+        <Link href="/billing" className="block py-2.5 px-4 rounded transition duration-200 hover:bg-gray-800 hover:text-white">
+          <CreditCard className="inline-block mr-2" size={20} />
+          Billing
         </Link>
       </nav>
       <div className="px-4 mt-auto">

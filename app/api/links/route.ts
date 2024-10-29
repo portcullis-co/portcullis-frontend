@@ -49,6 +49,7 @@ export async function POST(request: Request) {
         invite_token,
         internal_warehouse,
         logo,
+        creator: userId,
         redirect_url: redirectUrl,
         recipient_email,
         organization: orgId,
@@ -106,7 +107,7 @@ export async function GET() {
       encrypted_password,
       created_at
     `)
-    .eq('organization', orgId)
+    .eq('creator', userId)
     .order('created_at', { ascending: false });
 
   if (error) {
