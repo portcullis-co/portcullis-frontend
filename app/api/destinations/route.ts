@@ -25,24 +25,47 @@ export async function POST(request: Request) {
   try {
     const supabase = createClient();
     const { userId, orgId } = auth();
-    const { imageUrl, internal_warehouse, recipient_email, credentials, destination_name, organization, scheduled_at } = await request.json();
-  
+    
+    // Add logging to debug the request body
+    const body = await request.json();
+    console.log('Request body:', body);
 
-    if (!orgId) {
-      return NextResponse.json({ error: 'Unauthorized: No organization ID' }, { status: 401 });
+    const { 
+      organization,
+      internal_warehouse,
+      destination_type,
+      destination_name,
+      credentials,
+      scheduled_at 
+    } = body;
+
+    // Validate required fields
+    if (!organization || !internal_warehouse || !destination_type || !destination_name) {
+      console.error('Missing required fields:', { organization, internal_warehouse, destination_type, destination_name });
+      return NextResponse.json({ 
+        error: 'Missing required fields' 
+      }, { status: 400 });
     }
 
+    // Add logging for the insert operation
+    console.log('Inserting destination:', {
+      organization,
+      internal_warehouse,
+      destination_type,
+      destination_name,
+      credentials,
+      scheduled_at
+    });
 
     const { data, error } = await supabase
       .from('destinations')
-      .insert({ 
-        imageUrl,
-        internal_warehouse,
-        recipient_email,
-        credentials,
-        destination_name,
+      .insert({
         organization,
-        scheduled_at: scheduled_at
+        internal_warehouse,
+        destination_type,
+        destination_name,
+        credentials,
+        scheduled_at
       })
       .select()
       .single();
@@ -52,26 +75,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    const internal_logo = "https://portcullis-app.fly.dev/portcullis.svg"
-    // Send email using Resend
-    const emailHtml = ``;
-
-    try {
-      await resend.emails.send({
-        from: 'onboarding@resend.dev',
-        to: recipient_email,
-        subject: 'Confirm your email address',
-        html: emailHtml,
-      });
-    } catch (emailError) {
-      console.error('Error sending email:', emailError);
-      // Note: We're not returning here, as we still want to return the data even if email sending fails
-    }
-
+    console.log('Successfully created destination:', data);
     return NextResponse.json(data);
   } catch (error) {
-    console.error('Unexpected error:', error);
-    return NextResponse.json({ error: 'An unexpected error occurred' }, { status: 500 });
+    console.error('POST endpoint error:', error);
+    return NextResponse.json({ 
+      error: error instanceof Error ? error.message : 'An unexpected error occurred',
+      details: error 
+    }, { status: 500 });
   }
 }
 

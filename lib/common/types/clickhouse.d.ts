@@ -1,4 +1,4 @@
-enum WarehouseDataType {
+export enum WarehouseDataType {
     // Integer Types
     INTEGER = "INTEGER",
     SMALLINT = "SMALLINT",

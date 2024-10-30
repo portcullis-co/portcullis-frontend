@@ -1,5 +1,4 @@
 'use client';
-
 import { useOrganization } from '@clerk/nextjs';
 import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -11,9 +10,10 @@ import { Toaster } from "@/components/ui/toaster"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@clerk/nextjs"
 import crypto from 'crypto';
-import { ClickhouseCredentials, SnowflakeCredentials, BigQueryCredentials, RedshiftCredentials, AzureSynapseCredentials, CredentialsFor, TypeMappings, clickhouseToSnowflake, clickhouseToBigQuery, typeMatrix  } from '@/lib/common/types/clickhouse';
 import { format } from "date-fns"
 import { DateTimePicker } from "@/components/ui/datetime-picker";
+import { TriggerClient, } from "@trigger.dev/sdk";
+import { sendTriggerEvent } from "@/app/actions/trigger-actions";
 
 enum WarehouseType {
   Clickhouse = "Clickhouse",
@@ -40,7 +40,7 @@ const warehouseLogos: Record<WarehouseType, string> = {
 type Destination = {
   id: string;
   createdAt: string;
-  source_warehouse: string;
+  internal_warehouse: string;
   destination_type: WarehouseType;
   destination_name: string;
   credentials: string;
@@ -49,7 +49,7 @@ type Destination = {
 
 async function createDestination(
   organizationId: string,
-  source_warehouse: string,
+  internal_warehouse: string,
   destination_type: WarehouseType,
   destination_name: string,
   credentials: string,
@@ -60,19 +60,47 @@ async function createDestination(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       organization: organizationId,
-      source_warehouse,
+      internal_warehouse,
       destination_type,
       destination_name,
       credentials,
-      scheduled_at
+      scheduled_at: scheduled_at?.toISOString()
     }),
   });
+
   if (!response.ok) {
     const errorData = await response.json();
-    console.error('Server error:', errorData);
     throw new Error(errorData.error || 'Failed to create destination');
   }
+
   const data = await response.json();
+  
+  // Use the server action instead of direct Trigger.dev client
+  switch (data.destinationType) {
+    case WarehouseType.Snowflake:
+      await sendTriggerEvent("clickhouse-snowflake-sync", {
+        credentials: data.credentials,
+        organizationId: organizationId,
+        internal_warehouse: data.internal_warehouse,
+      });
+      break;
+    case WarehouseType.BigQuery:
+      await sendTriggerEvent("clickhouse-bigquery-sync", {
+        credentials: data.credentials,
+        organizationId: organizationId,
+        internal_warehouse: data.internal_warehouse,
+        scheduled_at: data.scheduled_at
+      });
+      break;
+    case WarehouseType.Redshift:
+      await sendTriggerEvent("clickhouse-redshift-sync", {
+        credentials: data.credentials,
+        organizationId: organizationId,
+        internal_warehouse: data.internal_warehouse,
+        scheduled_at: data.scheduled_at
+      });
+      break;
+  }
   console.log('Server response:', data);
   return data;
 }
@@ -171,7 +199,7 @@ const CredentialForm = ({ type, onChange, scheduledAt, setScheduledAt }: {
               hourCycle={24}
               granularity="second"
               placeholder={`Select date and time (${userTimeZone})`}
-              locale="en-US"
+              locale={{ code: "en-US" }}
               weekStartsOn={0}
               showWeekNumber={false}
               showOutsideDays={true}
@@ -225,7 +253,7 @@ const CredentialForm = ({ type, onChange, scheduledAt, setScheduledAt }: {
               hourCycle={24}
               granularity="second"
               placeholder={`Select date and time (${userTimeZone})`}
-              locale="en-US"
+              locale={{ code: "en-US" }}
               weekStartsOn={0}
               showWeekNumber={false}
               showOutsideDays={true}
@@ -251,7 +279,7 @@ const CredentialForm = ({ type, onChange, scheduledAt, setScheduledAt }: {
               hourCycle={24}
               granularity="second"
               placeholder={`Select date and time (${userTimeZone})`}
-              locale="en-US"
+              locale={{ code: "en-US" }}
               weekStartsOn={0}
               showWeekNumber={false}
               showOutsideDays={true}
@@ -277,7 +305,7 @@ const CredentialForm = ({ type, onChange, scheduledAt, setScheduledAt }: {
               hourCycle={24}
               granularity="second"
               placeholder={`Select date and time (${userTimeZone})`}
-              locale="en-US"
+              locale={{ code: "en-US" }}
               weekStartsOn={0}
               showWeekNumber={false}
               showOutsideDays={true}
@@ -302,7 +330,7 @@ const CredentialForm = ({ type, onChange, scheduledAt, setScheduledAt }: {
               hourCycle={24}
               granularity="second"
               placeholder={`Select date and time (${userTimeZone})`}
-              locale="en-US"
+              locale={{ code: "en-US" }}
               weekStartsOn={0}
               showWeekNumber={false}
               showOutsideDays={true}
@@ -330,7 +358,7 @@ const CredentialForm = ({ type, onChange, scheduledAt, setScheduledAt }: {
               hourCycle={24}
               granularity="second"
               placeholder={`Select date and time (${userTimeZone})`}
-              locale="en-US"
+              locale={{ code: "en-US" }}
               weekStartsOn={0}
               showWeekNumber={false}
               showOutsideDays={true}
@@ -356,7 +384,7 @@ const CredentialForm = ({ type, onChange, scheduledAt, setScheduledAt }: {
               hourCycle={24}
               granularity="second"
               placeholder={`Select date and time (${userTimeZone})`}
-              locale="en-US"
+              locale={{ code: "en-US" }}
               weekStartsOn={0}
               showWeekNumber={false}
               showOutsideDays={true}
@@ -384,7 +412,7 @@ const CredentialForm = ({ type, onChange, scheduledAt, setScheduledAt }: {
               hourCycle={24}
               granularity="second"
               placeholder={`Select date and time (${userTimeZone})`}
-              locale="en-US"
+              locale={{ code: "en-US" }}
               weekStartsOn={0}
               showWeekNumber={false}
               showOutsideDays={true}
@@ -588,6 +616,10 @@ export default function Destinations() {
   }) => {
     setIsLoading(true);
     try {
+      if (!organizationId) {
+        throw new Error('No organization ID available');
+      }
+
       const newDestination = await createDestination(
         organizationId,
         data.warehouseId,
@@ -601,10 +633,12 @@ export default function Destinations() {
         setDestinations((prev) => [newDestination, ...prev]);
         showToast('Destination created successfully', 'success');
         setIsDialogOpen(false);
+      } else {
+        throw new Error('Invalid destination data received');
       }
     } catch (error) {
       console.error('Error creating destination:', error);
-      showToast('Failed to create destination', 'error');
+      showToast(`Failed to create destination: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
     } finally {
       setIsLoading(false);
     }
@@ -657,7 +691,7 @@ export default function Destinations() {
           {destinations.map((row) => row && (
             <TableRow key={row.id}>
               <TableCell>{row.destination_name}</TableCell>
-              <TableCell>{row.source_warehouse}</TableCell>
+              <TableCell>{row.internal_warehouse}</TableCell>
               <TableCell>
                 <div className="flex items-center gap-2">
                   <img 
