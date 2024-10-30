@@ -25,11 +25,15 @@ import {
 } from "@/components/ui/select";
 import { table } from 'console';
 import Image from 'next/image';
+<<<<<<< HEAD
 import { PlusCircle, Plug } from 'lucide-react';
 import { ExportWrapper } from '@runportcullis/portcullis-react';
 import { decrypt } from '@/lib/encryption';
 import { encrypt } from '@/lib/encryption';
 import { Code } from '@/components/ui/code';
+=======
+import { PlusCircle } from 'lucide-react';
+>>>>>>> 6a429ee (no more links)
 
 interface Warehouse {
   organization: string;
@@ -358,7 +362,11 @@ export default function InternalWarehouseListPage() {
           <h1 className="text-2xl font-semibold">Internal Warehouses</h1>
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+<<<<<<< HEAD
           <DialogTrigger asChild onClick={() => handleDialogOpen('new')}>
+=======
+          <DialogTrigger asChild onClick={handleDialogOpen}>
+>>>>>>> 6a429ee (no more links)
             <Button variant="default" className="gap-2">
               <PlusCircle size={16} />
               Connect Database
@@ -471,9 +479,15 @@ export default function InternalWarehouseListPage() {
             <table className="w-full">
               <thead>
                 <tr className="border-b bg-muted/50">
+<<<<<<< HEAD
                   <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Host</th>
                   <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Database</th>
                   <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Integrate</th>
+=======
+                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Connection ID</th>
+                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Host</th>
+                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Database</th>
+>>>>>>> 6a429ee (no more links)
                   <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Actions</th>
                 </tr>
               </thead>
@@ -481,6 +495,7 @@ export default function InternalWarehouseListPage() {
                 {warehouses.length > 0 ? (
                   warehouses.map((warehouse) => (
                     <tr key={warehouse.id} className="border-b transition-colors hover:bg-muted/50">
+<<<<<<< HEAD
                       <td className="p-4 align-middle">{warehouse.host}</td>
                       <td className="p-4 align-middle">{warehouse.database}</td>
                       <td className="p-4 align-middle">
@@ -538,6 +553,11 @@ export default function App() {
                           </DialogContent>
                         </Dialog>
                       </td>
+=======
+                      <td className="p-4 align-middle">{warehouse.id}</td>
+                      <td className="p-4 align-middle">{warehouse.credentials?.host || 'Not available'}</td>
+                      <td className="p-4 align-middle">{warehouse.credentials?.database || 'Not available'}</td>
+>>>>>>> 6a429ee (no more links)
                       <td className="p-4 align-middle">
                         <Button
                           onClick={() => handleDelete(warehouse.id)}
