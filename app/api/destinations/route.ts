@@ -5,6 +5,7 @@ import { auth } from '@clerk/nextjs/server';
 import { Resend } from 'resend';
 import { z } from 'zod';
 import { encrypt } from '@/lib/encryption';
+import { DateTimePicker } from '@/components/ui/datetime-picker';
 
 type Destination = {
   id: string;
@@ -24,7 +25,7 @@ export async function POST(request: Request) {
   try {
     const supabase = createClient();
     const { userId, orgId } = auth();
-    const { imageUrl, internal_warehouse, recipient_email, credentials, destination_name, organization } = await request.json();
+    const { imageUrl, internal_warehouse, recipient_email, credentials, destination_name, organization, scheduled_at } = await request.json();
   
 
     if (!orgId) {
@@ -41,6 +42,7 @@ export async function POST(request: Request) {
         credentials,
         destination_name,
         organization,
+        scheduled_at: scheduled_at
       })
       .select()
       .single();
@@ -97,12 +99,7 @@ export async function GET(request: Request) {
       return NextResponse.json([], { status: 200 }); // Return empty array if no data
     }
 
-    const formattedData = data.map(item => ({
-      ...item,
-      createdAt: item.created_at,
-    }));
-
-    return NextResponse.json(formattedData);
+    return NextResponse.json(data);
   } catch (error) {
     console.error('GET endpoint error:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
