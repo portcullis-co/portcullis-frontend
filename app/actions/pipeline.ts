@@ -97,12 +97,13 @@ export async function runPipeline(
 
     // Create sync record
     const { data: syncData, error: syncError } = await supabase
-      .from('syncs')
+      .from('exports')
       .insert({
         organization: organization,
         internal_warehouse: internal_warehouse,
         table_name: internalData.table_name,
         link_type: warehouseType,
+        status: 1
       })
       .select()
       .single()
