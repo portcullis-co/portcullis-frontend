@@ -137,7 +137,7 @@ export function convertClickhouseToSnowflake(clickhouseType: string, value: any)
     }
 
     // Handle Nullable types
-    if (clickhouseType.startsWith('Nullable(')) {
+    if (clickhouseType.includes('Nullable')) {
         const innerType = clickhouseType.slice(9, -1);
         console.log(`Handling Nullable type, inner type: ${innerType}`);
         return convertClickhouseToSnowflake(innerType, value);

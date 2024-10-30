@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/select";
 import { table } from 'console';
 import Image from 'next/image';
+import { PlusCircle } from 'lucide-react';
 
 interface Warehouse {
   organization: string;
@@ -247,16 +248,17 @@ export default function InternalWarehouseListPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto p-6">
+    <div className="p-8">
       <div className="flex items-center justify-between mb-8">
-        <div>
-          <div className="mb-2" />
-          <Image src="/clickhouse.svg" alt="Clickhouse Logo" width={30} height={30} />
-          <h1 className="text-3xl font-bold">Clickhouse Connection Manager</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-semibold">Internal Warehouses</h1>
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild onClick={handleDialogOpen}>
-            <Button className="mb-4">Connect Clickhouse Database</Button>
+            <Button variant="default" className="gap-2">
+              <PlusCircle size={16} />
+              Connect Database
+            </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-[500px]">
             <DialogHeader>
@@ -330,54 +332,54 @@ export default function InternalWarehouseListPage() {
       </div>
       
       {isLoading ? (
-        <p>Loading your connections...</p>
+        <div className="flex items-center justify-center h-[400px]">
+          <p className="text-muted-foreground">Loading your connections...</p>
+        </div>
       ) : error ? (
-        <p className="text-red-500">{error}</p>
+        <div className="flex items-center justify-center h-[400px]">
+          <p className="text-red-500">{error}</p>
+        </div>
       ) : (
-        <div className="space-y-6">
-        <h1 className="text-2xl md:text-3xl font-semibold">Internal Warehouses</h1>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-100">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Connection ID</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Host</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Database</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {warehouses.length > 0 ? (
-                warehouses.map((warehouse) => (
-                  <tr key={warehouse.id}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{warehouse.id}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      {warehouse.credentials?.host || 'Not available'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      {warehouse.credentials?.database || 'Not available'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <Button
-                        onClick={() => handleDelete(warehouse.id)}
-                        variant="destructive"
-                        size="sm"
-                      >
-                        Disconnect
-                      </Button>
+        <div className="rounded-lg border bg-card">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b bg-muted/50">
+                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Connection ID</th>
+                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Host</th>
+                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Database</th>
+                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {warehouses.length > 0 ? (
+                  warehouses.map((warehouse) => (
+                    <tr key={warehouse.id} className="border-b transition-colors hover:bg-muted/50">
+                      <td className="p-4 align-middle">{warehouse.id}</td>
+                      <td className="p-4 align-middle">{warehouse.credentials?.host || 'Not available'}</td>
+                      <td className="p-4 align-middle">{warehouse.credentials?.database || 'Not available'}</td>
+                      <td className="p-4 align-middle">
+                        <Button
+                          onClick={() => handleDelete(warehouse.id)}
+                          variant="destructive"
+                          size="sm"
+                          className="gap-2"
+                        >
+                          Disconnect
+                        </Button>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={4} className="h-24 text-center text-muted-foreground">
+                      No Clickhouse connections found. Click "Connect Database" to add your first connection.
                     </td>
                   </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={4} className="px-6 py-4 text-center text-gray-500">
-                    No Clickhouse connections found. Click "Connect Clickhouse Database" to add your first connection.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
       <Toaster />
