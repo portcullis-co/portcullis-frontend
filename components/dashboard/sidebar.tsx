@@ -41,9 +41,9 @@ const Sidebar: React.FC<SidebarProps> = ({ openWarehouseConnection, openAppsConn
           <Database className="inline-block mr-2" size={20} />
           Internal Warehouses
         </Link>
-        <Link href="/destinations" className="block py-2.5 px-4 rounded transition duration-200 hover:bg-gray-800 hover:text-white">
+        <Link href="/exports" className="block py-2.5 px-4 rounded transition duration-200 hover:bg-gray-800 hover:text-white">
           <ArrowRightLeft className="inline-block mr-2" size={20} />
-          Destinations
+          Exports
         </Link>
         <Link href="/settings" className="block py-2.5 px-4 rounded transition duration-200 hover:bg-gray-800 hover:text-white">
           <Settings className="inline-block mr-2" size={20} />

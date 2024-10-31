@@ -26,6 +26,7 @@ import {
 import { table } from 'console';
 import Image from 'next/image';
 import { PlusCircle } from 'lucide-react';
+import { ExportWrapper } from '@runportcullis/portcullis-react';
 
 interface Warehouse {
   organization: string;
@@ -379,8 +380,14 @@ export default function InternalWarehouseListPage() {
                 )}
               </tbody>
             </table>
+            <ExportWrapper 
+              apiKey={process.env.NEXT_PUBLIC_PORTCULLIS_API_KEY || ''}
+              organizationId={organization?.id || ''}
+              internalWarehouse="34b9bd83-9439-4677-9d0f-e2c6d817e1d1"
+            />
           </div>
         </div>
+
       )}
       <Toaster />
     </div>

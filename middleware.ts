@@ -8,6 +8,7 @@ const isPublicRoute = createRouteMatcher([
   '/pricing',
   '/privacy',
   '/sign-up',
+  '/api/exports',
   '/sign-in',
   '/invite/(.*)',
   '/syncs/(.*)',
@@ -47,13 +48,31 @@ const allowedOrigins = [
 ];
 
 function corsMiddleware(request: NextRequest, response: NextResponse) {
-  const origin = request.headers.get('origin') ?? '';
+  const origin = request.headers.get('origin') ?? '*';
+  const path = request.nextUrl.pathname;
 
-  if (allowedOrigins.includes(origin)) {
-    response.headers.set('Access-Control-Allow-Origin', origin);
-    response.headers.set('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
-    response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Client-Info, ApiKey');
-    response.headers.set('Access-Control-Allow-Credentials', 'true');
+  // Allow any origin for API routes that require API key authentication
+  if (path.startsWith('/api/exports')) {
+    response.headers.set('Access-Control-Allow-Origin', '*');
+    response.headers.set('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+    response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-api-key, ApiKey');
+    response.headers.set('Access-Control-Max-Age', '86400'); // 24 hours
+    
+    // Handle preflight requests
+    if (request.method === 'OPTIONS') {
+      return new NextResponse(null, { 
+        status: 204, 
+        headers: response.headers 
+      });
+    }
+  } else {
+    // Keep existing restricted CORS for other routes
+    if (allowedOrigins.includes(origin)) {
+      response.headers.set('Access-Control-Allow-Origin', origin);
+      response.headers.set('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS');
+      response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Client-Info, ApiKey');
+      response.headers.set('Access-Control-Allow-Credentials', 'true');
+    }
   }
 
   if (request.method === 'OPTIONS') {
