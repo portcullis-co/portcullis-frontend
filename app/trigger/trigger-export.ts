@@ -11,10 +11,10 @@ import {
 
 // Define the task payload type
 type SyncPayload = {
-  sourceCredentials: ClickhouseCredentials;
-  destinationCredentials: SnowflakeCredentials;
+  internal_credentials: ClickhouseCredentials;
+  destination_credentials: SnowflakeCredentials;
   query: string;
-  tableName: string;
+  table: string;
 };
 
 export const clickhouseToSnowflakeSync = task({
@@ -29,20 +29,20 @@ export const clickhouseToSnowflakeSync = task({
   run: async (payload: SyncPayload) => {
     // Initialize Clickhouse client
     const clickhouse = createClient({
-      host: payload.sourceCredentials.host,
-      username: payload.sourceCredentials.username,
-      password: payload.sourceCredentials.password,
-      database: payload.sourceCredentials.database
+      host: payload.internal_credentials.host,
+      username: payload.internal_credentials.username,
+      password: payload.internal_credentials.password,
+      database: payload.internal_credentials.database
     });
 
     // Initialize Snowflake connection
     const snowflake = Snowflake.createConnection({
-      account: payload.destinationCredentials.account,
-      username: payload.destinationCredentials.username,
-      password: payload.destinationCredentials.password,
-      warehouse: payload.destinationCredentials.warehouse,
-      database: payload.destinationCredentials.database,
-      schema: payload.destinationCredentials.schema
+      account: payload.destination_credentials.account,
+      username: payload.destination_credentials.username,
+      password: payload.destination_credentials.password,
+      warehouse: payload.destination_credentials.warehouse,
+      database: payload.destination_credentials.database,
+      schema: payload.destination_credentials.schema
     });
 
     try {
@@ -58,7 +58,7 @@ export const clickhouseToSnowflakeSync = task({
       logger.info("Starting data sync", { 
         source: "Clickhouse", 
         destination: "Snowflake",
-        table: payload.tableName 
+        table: payload.table 
       });
 
       // Process the stream in chunks
@@ -78,7 +78,7 @@ export const clickhouseToSnowflakeSync = task({
         // Batch insert into Snowflake
         await new Promise((resolve, reject) => {
           snowflake.execute({
-            sqlText: `INSERT INTO ${payload.tableName} SELECT * FROM TABLE(RESULT_SCAN(?))`,
+            sqlText: `INSERT INTO ${payload.table} SELECT * FROM TABLE(RESULT_SCAN(?))`,
             binds: [JSON.stringify(transformedRows)],
             complete: (err, stmt) => {
               if (err) reject(err);
