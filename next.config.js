@@ -23,7 +23,8 @@ const nextConfig = {
         tls: false,
         fs: false,
         crypto: false,
-        'lz4': false
+        'lz4': false,
+        'xxhash': false
       };
     }
 
@@ -52,7 +53,10 @@ const nextConfig = {
     // Add rule to ignore problematic modules
     config.module.rules.push({
       test: /\.(node|lz4|xxhash)$/,
-      loader: 'ignore-loader'
+      use: 'null-loader',
+      resource: {
+        not: [/node_modules/]
+      }
     });
 
     return config;
