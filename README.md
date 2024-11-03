@@ -1,6 +1,6 @@
-# Portcullis - Fair Source Embedded ETL Platform
+# Portcullis - Type-Safe Embedded ETL Platform
 
-Portcullis is a modern and fair source embedded ETL platform that enables seamless data synchronization between various data warehouses. It currently supports:
+Portcullis is a modern and type-safe embedded ETL platform that enables seamless data synchronization between various data warehouses. It currently supports:
 
 - Clickhouse
 - Snowflake
