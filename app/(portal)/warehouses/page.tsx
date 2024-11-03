@@ -366,42 +366,93 @@ export default function InternalWarehouseListPage() {
           </DialogTrigger>
           <DialogContent className="sm:max-w-[800px]">
             <DialogHeader>
-              <DialogTitle>Integration Instructions</DialogTitle>
+              <DialogTitle>Connect Clickhouse Database</DialogTitle>
               <DialogDescription>
-                Follow these steps to integrate this warehouse into your application.
+                Enter your Clickhouse database credentials below.
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <h4 className="text-sm font-medium mb-2">1. Install the SDK</h4>
-                <Code
-                  code="npm install @runportcullis/portcullis-react"
-                  language="bash"
-                  title="Terminal"
-                />
+            {!isTableSelectionStep && !isColumnSelectionStep ? (
+              <div className="grid gap-4 py-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="host">Host</Label>
+                  <Input
+                    id="host"
+                    value={newWarehouse.credentials.host}
+                    onChange={(e) => setNewWarehouse({
+                      ...newWarehouse,
+                      credentials: { ...newWarehouse.credentials, host: e.target.value }
+                    })}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="database">Database</Label>
+                  <Input
+                    id="database"
+                    value={newWarehouse.credentials.database}
+                    onChange={(e) => setNewWarehouse({
+                      ...newWarehouse,
+                      credentials: { ...newWarehouse.credentials, database: e.target.value }
+                    })}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="username">Username</Label>
+                  <Input
+                    id="username"
+                    value={newWarehouse.credentials.username}
+                    onChange={(e) => setNewWarehouse({
+                      ...newWarehouse,
+                      credentials: { ...newWarehouse.credentials, username: e.target.value }
+                    })}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="password">Password</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    value={newWarehouse.credentials.password}
+                    onChange={(e) => setNewWarehouse({
+                      ...newWarehouse,
+                      credentials: { ...newWarehouse.credentials, password: e.target.value }
+                    })}
+                  />
+                </div>
+                <Button onClick={handleTestConnection}>Test Connection</Button>
               </div>
-              
-              <div>
-                <h4 className="text-sm font-medium mb-2">2. Add the Export Component</h4>
-                <Code 
-                  code={`import { ExportWrapper } from '@runportcullis/portcullis-react';
-
-export default function App() {
-  return (
-    <ExportWrapper
-      apiKey="YOUR_API_KEY" // Replace with your actual API key
-      organizationId="${organization?.id}"
-      internalWarehouse="${newWarehouse}"
-      tableName="your-table-name" // Replace with your actual table name
-    />
-  );
-}`}
-                  language="tsx"
-                  title="app/page.tsx"
-                  showLineNumbers
-                />
+            ) : isTableSelectionStep ? (
+              <div className="grid gap-4 py-4">
+                <Select onValueChange={setSelectedTable}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a table" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {tables.map((table) => (
+                      <SelectItem key={table} value={table}>
+                        {table}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button onClick={fetchColumns}>Next</Button>
               </div>
-            </div>
+            ) : (
+              <div className="grid gap-4 py-4">
+                <Select onValueChange={setTenancyColumn}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select tenancy column" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {columns.map((column) => (
+                      <SelectItem key={column} value={column}>
+                        {column}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button onClick={handleAddWarehouse}>Connect Warehouse</Button>
+              </div>
+            )}
           </DialogContent>
         </Dialog>
       </div>
