@@ -22,6 +22,32 @@ Portcullis is a modern and type-safe embedded ETL platform that enables seamless
 - **Secure**: Portcullis encrypts all data in transit and at rest.
 - **Scalable**: Portcullis is designed to be scalable. It is designed to handle large amounts of data.
 
+#### Multi-Tenancy Configuration
+
+Each warehouse connection requires four key fields for tenant isolation:
+
+- **tenancy_column**: The column name in your tables that stores the tenant identifier (e.g., 'organization_id', 'tenant_id')
+- **tenant_id**: The specific tenant identifier value for filtering data (e.g., 'org_123', 'tenant_456')
+
+Example warehouse configuration:
+```typescript
+interface WarehouseConfig {
+  credentials: {
+    host: string;
+    database: string;
+    username: string;
+    password: string;
+  };
+  tenancy_column: string;  // Column used for tenant filtering
+  tenant_id: string;       // Tenant identifier value
+}
+```
+
+All queries are automatically filtered using these fields:
+```sql
+SELECT * FROM table WHERE ${tenancy_column} = '${tenant_id}'
+```
+
 ### Data Synchronization
 
 - **Type Safe**: Portcullis is designed to be type safe. It uses the Zod schema to validate the data.
@@ -95,7 +121,8 @@ export const clickhouseToSnowflake: Map<string, string> = new Map([
     ['JSON', 'VARIANT'],
     ['Array', 'ARRAY'],
     ['Binary', 'BINARY']
-]);```
+]);
+```
 
 ### Data Synchronization
 

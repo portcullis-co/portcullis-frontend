@@ -2,20 +2,11 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { auth } from '@clerk/nextjs/server';
 import { validateApiKey } from '@/lib/validateApiKey';
-<<<<<<< HEAD
 import { encrypt, decrypt } from '@/lib/encryption';
 import type { ClickhouseCredentials } from '@/lib/common/types/clickhouse.d';
 import type { clickhouseToSnowflakeSync } from "@/app/trigger/trigger-export";
 import { tasks } from "@trigger.dev/sdk/v3";
-=======
-import { client } from "@/lib/trigger";
-import { clickhouseToSnowflakeSync } from "@/app/trigger/trigger-export";
 import Analytics from '@segment/analytics-node';
-
-const analytics = new Analytics({ 
-  writeKey: process.env.SEGMENT_WRITE_KEY! 
-});
->>>>>>> f0e1bf1 (api and types)
 
 const allowedOrigins = [
   'http://localhost:3000',
@@ -91,11 +82,7 @@ export async function POST(request: Request) {
     } = body;
 
     // Validate required fields
-<<<<<<< HEAD
     if (!internal_warehouse || !destination_type || !destination_name || !table || !credentials || !internal_credentials) {
-=======
-    if (!internal_warehouse || !destination_type || !destination_name || !table) {
->>>>>>> f0e1bf1 (api and types)
       return NextResponse.json({ 
         error: 'Missing required fields' 
       }, { status: 400 });
@@ -105,20 +92,11 @@ export async function POST(request: Request) {
       .from('exports')
       .insert({
         organization: body.organization,
-<<<<<<< HEAD
         internal_warehouse: internal_warehouse,
         destination_type: destination_type,
         destination_name: destination_name,
         table: table,
         scheduled_at: scheduled_at
-=======
-        internal_warehouse: body.internal_warehouse,
-        destination_type: body.destination_type,
-        destination_name: body.destination_name,
-        credentials: body.credentials,
-        table: body.table,
-        scheduled_at: body.scheduled_at
->>>>>>> f0e1bf1 (api and types)
       })
       .select()
       .single();
@@ -130,7 +108,6 @@ export async function POST(request: Request) {
 
     // Trigger the export task
     if (data) {
-<<<<<<< HEAD
       try {
         console.log('Fetching warehouse with ID:', internal_warehouse);
 
@@ -140,17 +117,6 @@ export async function POST(request: Request) {
         // Add error handling for client initialization
         if (!process.env.TRIGGER_SECRET_KEY) {
           throw new Error('TRIGGER_SECRET_KEY environment variable is not set');
-=======
-      await client.sendEvent({
-        name: "clickhouse-snowflake-sync",
-        payload: {
-          internal_credentials: internal_warehouse.credentials,
-          destination_credentials: body.credentials,
-          query: body.query || "SELECT * FROM your_table",
-          destination_type: body.destination_type,
-          table: body.table,
-          scheduled_at: body.scheduled_at
->>>>>>> f0e1bf1 (api and types)
         }
 
         const payload = {
@@ -184,19 +150,6 @@ export async function POST(request: Request) {
         }, { status: 500, headers });
       }
     }
-
-    analytics.track({
-      userId: body.organization,
-      event: 'Export Created',
-      properties: {
-        organization_id: body.organization,
-        destination_type: body.destination_type,
-        destination_name: body.destination_name,
-        source_table: body.table,
-        scheduled_at: body.scheduled_at,
-        revenue: 250
-      },
-    });
 
     return NextResponse.json(data, {
       status: 200,

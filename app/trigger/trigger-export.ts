@@ -27,16 +27,10 @@ import type { KafkaCredentials } from '@/lib/common/types/clickhouse.d';
 import type { BigQueryCredentials } from '@/lib/common/types/clickhouse.d';
 
 // Define the task payload type
-<<<<<<< HEAD
 type SnowflakeSyncPayload = {
   internal_credentials: ClickhouseCredentials;
   destination_credentials: SnowflakeCredentials;
   organization: string;
-=======
-type SyncPayload = {
-  internal_credentials: ClickhouseCredentials;
-  destination_credentials: SnowflakeCredentials;
->>>>>>> f0e1bf1 (api and types)
   query: string;
   table: string;
 };
@@ -56,15 +50,11 @@ export const clickhouseToSnowflakeSync = task({
       host: payload.internal_credentials.host,
       username: payload.internal_credentials.username,
       password: payload.internal_credentials.password,
-<<<<<<< HEAD
       database: payload.internal_credentials.database,
       compression: {
         response: false,
         request: false
       }
-=======
-      database: payload.internal_credentials.database
->>>>>>> f0e1bf1 (api and types)
     });
 
     // Initialize Snowflake connection
