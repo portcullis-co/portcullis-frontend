@@ -274,7 +274,11 @@ export async function POST(request: Request) {
         internal_warehouse: internal_warehouse,
         destination_type: destination_type,
         destination_name: destination_name,
-        table: table,```
+        table: table,
+      });
+  }
+}
+```
 
 ## Getting Started
 
