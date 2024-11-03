@@ -11,7 +11,8 @@ const nextConfig = {
       'node-gyp': 'node-gyp',
       'utf-8-validate': 'utf-8-validate',
       'bufferutil': 'bufferutil',
-      'encoding': 'encoding'
+      'encoding': 'encoding',
+      'lz4': 'lz4'
     }];
 
     // Add fallbacks for non-server environment
@@ -22,6 +23,7 @@ const nextConfig = {
         tls: false,
         fs: false,
         crypto: false,
+        'lz4': false
       };
     }
 
@@ -38,6 +40,18 @@ const nextConfig = {
 
     config.module.rules.push({
       test: /\.cs$/,
+      loader: 'ignore-loader'
+    });
+
+    // Ignore native modules
+    config.module.rules.push({
+      test: /\.node$/,
+      use: 'node-loader',
+    });
+
+    // Add rule to ignore problematic modules
+    config.module.rules.push({
+      test: /\.(node|lz4|xxhash)$/,
       loader: 'ignore-loader'
     });
 

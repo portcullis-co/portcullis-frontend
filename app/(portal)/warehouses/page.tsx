@@ -156,6 +156,10 @@ export default function InternalWarehouseListPage() {
         username: newWarehouse.credentials.username,
         password: newWarehouse.credentials.password,
         database: newWarehouse.credentials.database,
+        compression: {
+          response: false,
+          request: false
+        }
       });
 
       // Test the connection
@@ -380,11 +384,6 @@ export default function InternalWarehouseListPage() {
                 )}
               </tbody>
             </table>
-            <ExportWrapper 
-              apiKey={process.env.NEXT_PUBLIC_PORTCULLIS_API_KEY || ''}
-              organizationId={organization?.id || ''}
-              internalWarehouse="34b9bd83-9439-4677-9d0f-e2c6d817e1d1"
-            />
           </div>
         </div>
 

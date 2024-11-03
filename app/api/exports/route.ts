@@ -2,13 +2,10 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { auth } from '@clerk/nextjs/server';
 import { validateApiKey } from '@/lib/validateApiKey';
-import { client } from "@/lib/trigger";
-import { clickhouseToSnowflakeSync } from "@/app/trigger/trigger-export";
-import Analytics from '@segment/analytics-node';
-
-const analytics = new Analytics({ 
-  writeKey: process.env.SEGMENT_WRITE_KEY! 
-});
+import { encrypt, decrypt } from '@/lib/encryption';
+import type { ClickhouseCredentials } from '@/lib/common/types/clickhouse.d';
+import type { clickhouseToSnowflakeSync } from "@/app/trigger/trigger-export";
+import { tasks } from "@trigger.dev/sdk/v3";
 
 const allowedOrigins = [
   'http://localhost:3000',
@@ -43,13 +40,20 @@ export async function POST(request: Request) {
   const headers = corsHeaders(origin);
   
   try {
+    // Log all headers for debugging
+    console.log('Request headers:', Object.fromEntries(request.headers.entries()));
+    
     const supabase = createClient();
     const apiKey = request.headers.get('x-api-key');
+    console.log('Received API Key:', apiKey); // Be careful not to log actual keys in production
+    
     const body = await request.json();
+    console.log('Request body:', body);
     
     // Validate API key if present
     if (apiKey) {
       const { isValid, organizationId } = await validateApiKey(apiKey);
+      console.log('API Key validation:', { isValid, organizationId }); // Debug log
       if (!isValid) {
         return NextResponse.json({ error: 'Invalid API key' }, { status: 401 });
       }
@@ -57,6 +61,7 @@ export async function POST(request: Request) {
     } else {
       // Fall back to Clerk auth
       const { userId, orgId } = auth();
+      console.log('Clerk auth:', { userId, orgId }); // Debug log
       if (!orgId) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
       }
@@ -65,6 +70,7 @@ export async function POST(request: Request) {
 
     const { 
       internal_warehouse,
+      internal_credentials,
       destination_type,
       destination_name,
       table,
@@ -73,7 +79,7 @@ export async function POST(request: Request) {
     } = body;
 
     // Validate required fields
-    if (!internal_warehouse || !destination_type || !destination_name || !table) {
+    if (!internal_warehouse || !destination_type || !destination_name || !table || !credentials || !internal_credentials) {
       return NextResponse.json({ 
         error: 'Missing required fields' 
       }, { status: 400 });
@@ -83,12 +89,11 @@ export async function POST(request: Request) {
       .from('exports')
       .insert({
         organization: body.organization,
-        internal_warehouse: body.internal_warehouse,
-        destination_type: body.destination_type,
-        destination_name: body.destination_name,
-        credentials: body.credentials,
-        table: body.table,
-        scheduled_at: body.scheduled_at
+        internal_warehouse: internal_warehouse,
+        destination_type: destination_type,
+        destination_name: destination_name,
+        table: table,
+        scheduled_at: scheduled_at
       })
       .select()
       .single();
@@ -100,31 +105,48 @@ export async function POST(request: Request) {
 
     // Trigger the export task
     if (data) {
-      await client.sendEvent({
-        name: "clickhouse-snowflake-sync",
-        payload: {
-          internal_credentials: internal_warehouse.credentials,
-          destination_credentials: body.credentials,
-          query: body.query || "SELECT * FROM your_table",
-          destination_type: body.destination_type,
-          table: body.table,
-          scheduled_at: body.scheduled_at
-        }
-      });
-    }
+      try {
+        console.log('Fetching warehouse with ID:', internal_warehouse);
 
-    analytics.track({
-      userId: body.organization,
-      event: 'Export Created',
-      properties: {
-        organization_id: body.organization,
-        destination_type: body.destination_type,
-        destination_name: body.destination_name,
-        source_table: body.table,
-        scheduled_at: body.scheduled_at,
-        revenue: 250
-      },
-    });
+        // Decrypt the internal warehouse credentials
+        const decryptedCredentials = await decrypt(internal_credentials);
+
+        // Add error handling for client initialization
+        if (!process.env.TRIGGER_SECRET_KEY) {
+          throw new Error('TRIGGER_SECRET_KEY environment variable is not set');
+        }
+
+        const payload = {
+          internal_warehouse: internal_warehouse,
+          internal_credentials: decryptedCredentials,
+          destination_credentials: credentials,
+          organization: body.organization,
+          query: body.query || "SELECT * FROM your_table",
+          destination_type: destination_type,
+          table: table,
+          scheduled_at: scheduled_at
+        }
+        switch (destination_type) {
+          case "snowflake":
+            await tasks.trigger<typeof clickhouseToSnowflakeSync>(
+              "clickhouse-snowflake-sync",
+              payload
+            );
+            console.log("Successfully scheduled Snowflake export task");
+            break;
+          // Add other cases here as needed
+          default:
+            throw new Error(`Unsupported destination type: ${destination_type}`);
+        }
+
+      } catch (error) {
+        console.error('Trigger event error:', error);
+        return NextResponse.json({ 
+          error: 'Failed to schedule export task',
+          details: error instanceof Error ? error.message : 'Unknown error'
+        }, { status: 500, headers });
+      }
+    }
 
     return NextResponse.json(data, {
       status: 200,

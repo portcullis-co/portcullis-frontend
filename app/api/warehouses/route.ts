@@ -108,7 +108,7 @@ export async function POST(request: Request) {
   }
   
   try {
-    const { credentials, table_name } = await request.json();
+    const { credentials, tableName } = await request.json();
     
     // Encrypt credentials before storing
     const encryptedCredentials = await encrypt(credentials);
@@ -116,10 +116,10 @@ export async function POST(request: Request) {
     const { data, error } = await supabase
       .from('warehouses')
       .insert({ 
-        credentials: encryptedCredentials, 
+        internal_credentials: encryptedCredentials,
         organization: orgId, 
-        slug, 
-        table_name 
+        slug,
+        table_name: tableName,
       })
       .select()
       .single();
