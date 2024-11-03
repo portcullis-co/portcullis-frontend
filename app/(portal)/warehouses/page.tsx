@@ -25,12 +25,23 @@ import {
 } from "@/components/ui/select";
 import { table } from 'console';
 import Image from 'next/image';
+<<<<<<< HEAD
+import { PlusCircle, Plug } from 'lucide-react';
+import { ExportWrapper } from '@runportcullis/portcullis-react';
+import { decrypt } from '@/lib/encryption';
+import { encrypt } from '@/lib/encryption';
+import { Code } from '@/components/ui/code';
+=======
+import { PlusCircle } from 'lucide-react';
+>>>>>>> 6a429ee (no more links)
 
 interface Warehouse {
   organization: string;
   id: string;
   status: string;
-  credentials?: ClickhouseCredentials;
+  tenancy_column: string;  // Name of the column used for tenant filtering
+  internal_credentials: string;
+  tenant_id: string;
 }
 
 interface ClickhouseCredentials {
@@ -40,8 +51,16 @@ interface ClickhouseCredentials {
   password: string;
 }
 
+interface DecryptedWarehouse extends Omit<Warehouse, 'internal_credentials'> {
+  host: string;
+  database: string;
+}
+
+// Add this outside the component to persist across rerenders
+const DIALOG_STATE_KEY = 'warehouseIntegrationDialog';
+
 export default function InternalWarehouseListPage() {
-  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [warehouses, setWarehouses] = useState<DecryptedWarehouse[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [newWarehouse, setNewWarehouse] = useState<{ credentials: ClickhouseCredentials }>({
     credentials: {
@@ -55,10 +74,33 @@ export default function InternalWarehouseListPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [tables, setTables] = useState<string[]>([]);
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
+  const [columns, setColumns] = useState<string[]>([]);
+  const [tenancyColumn, setTenancyColumn] = useState<string | null>(null);
+  const [isColumnSelectionStep, setIsColumnSelectionStep] = useState(false);
   const { organization, isLoaded } = useOrganization();
   const { toast } = useToast();
   const isDialogOpenRef = useRef(false);
   const [isTableSelectionStep, setIsTableSelectionStep] = useState(false); // New state for step control
+
+  // Replace the simple dialog state with one that persists in sessionStorage
+  const [openDialogId, setOpenDialogId] = useState<string | null>(() => {
+    // Initialize from sessionStorage if available
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem(DIALOG_STATE_KEY);
+    }
+    return null;
+  });
+
+  // Update the dialog state handlers
+  const handleDialogOpen = (warehouseId: string) => {
+    setOpenDialogId(warehouseId);
+    sessionStorage.setItem(DIALOG_STATE_KEY, warehouseId);
+  };
+
+  const handleDialogClose = () => {
+    setOpenDialogId(null);
+    sessionStorage.removeItem(DIALOG_STATE_KEY);
+  };
 
   useEffect(() => {
     if (isLoaded && organization) {
@@ -90,7 +132,41 @@ export default function InternalWarehouseListPage() {
         throw new Error('Unexpected data format from server');
       }
 
-      setWarehouses(data.warehouses);
+      // Decrypt credentials for each warehouse
+      const decryptedWarehouses = await Promise.all(
+        data.warehouses.map(async (warehouse: Warehouse) => {
+          try {
+            // Make sure we're accessing the correct property
+            if (!warehouse.internal_credentials) {
+              throw new Error('No credentials found');
+            }
+            
+            console.log('Encrypted credentials:', warehouse.internal_credentials);
+
+            const decryptedCredsString = await decrypt(warehouse.internal_credentials);
+            console.log('Decrypted string:', decryptedCredsString);
+
+            // Add additional decryption if needed
+            const finalDecryptedString = await decrypt(decryptedCredsString);
+            const decryptedCreds = JSON.parse(finalDecryptedString);
+
+            return {
+              ...warehouse,
+              host: decryptedCreds.host,
+              database: decryptedCreds.database,
+            };
+          } catch (error) {
+            console.error('Error decrypting credentials:', error);
+            return {
+              ...warehouse,
+              host: 'Decryption failed',
+              database: 'Decryption failed',
+            };
+          }
+        })
+      );
+
+      setWarehouses(decryptedWarehouses);
     } catch (error) {
       console.error('Error fetching Clickhouse warehouses:', error);
       setError(error instanceof Error ? error.message : "An unknown error occurred");
@@ -154,6 +230,10 @@ export default function InternalWarehouseListPage() {
         username: newWarehouse.credentials.username,
         password: newWarehouse.credentials.password,
         database: newWarehouse.credentials.database,
+        compression: {
+          response: false,
+          request: false
+        }
       });
 
       // Test the connection
@@ -174,11 +254,41 @@ export default function InternalWarehouseListPage() {
     }
   };
 
-  const handleAddWarehouse = async () => {
-    if (!selectedTable) {
+  const fetchColumns = async () => {
+    if (!selectedTable) return;
+    
+    const clickhouseClient = Clickhouse({
+      url: newWarehouse.credentials.host,
+      username: newWarehouse.credentials.username,
+      password: newWarehouse.credentials.password,
+      database: newWarehouse.credentials.database,
+    });
+
+    try {
+      const resultSet = await clickhouseClient.query({
+        query: `DESCRIBE ${selectedTable}`,
+        format: 'JSONEachRow',
+      });
+      const dataset: { name: string }[] = await resultSet.json();
+      const columnNames = dataset.map((row) => row.name);
+      setColumns(columnNames);
+      setIsColumnSelectionStep(true);
+      setIsTableSelectionStep(false);
+    } catch (error) {
+      console.error('Error fetching columns:', error);
       toast({
-        title: "Table Selection Required",
-        description: "Please select a table before proceeding.",
+        title: "Error",
+        description: "Failed to fetch table columns",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleAddWarehouse = async () => {
+    if (!selectedTable || !tenancyColumn) {
+      toast({
+        title: "Selection Required",
+        description: "Please select both a table and tenancy column before proceeding.",
         variant: "destructive",
       });
       return;
@@ -190,21 +300,26 @@ export default function InternalWarehouseListPage() {
         throw new Error('Organization ID is not available');
       }
   
-      const encryptedCredentials = {
+      // Encrypt the credentials before sending
+      const credentialsString = JSON.stringify({
         host: newWarehouse.credentials.host,
         database: newWarehouse.credentials.database,
         username: newWarehouse.credentials.username,
         password: newWarehouse.credentials.password,
-      };
-  
+      });
+      
+      const encryptedCredentials = await encrypt(credentialsString); // You'll need to import the encrypt function
+
       const response = await fetch('/api/warehouses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           organization: orgId,
           internal_type: 'clickhouse',
-          credentials: encryptedCredentials,
+          internal_credentials: encryptedCredentials,  // Send encrypted string
           table_name: selectedTable,
+          tenancy_column: tenancyColumn,
+          tenant_id: tenancyColumn,
         }),
       });
   
@@ -240,145 +355,233 @@ export default function InternalWarehouseListPage() {
     }
   };
 
-  const handleDialogOpen = () => {
-    isDialogOpenRef.current = true;
-    setIsDialogOpen(true);
-    setIsTableSelectionStep(false); // Reset to the first step
-  };
-
   return (
-    <div className="max-w-4xl mx-auto p-6">
+    <div className="p-8">
       <div className="flex items-center justify-between mb-8">
-        <div>
-          <div className="mb-2" />
-          <Image src="/clickhouse.svg" alt="Clickhouse Logo" width={30} height={30} />
-          <h1 className="text-3xl font-bold">Clickhouse Connection Manager</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-semibold">Internal Warehouses</h1>
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+<<<<<<< HEAD
+          <DialogTrigger asChild onClick={() => handleDialogOpen('new')}>
+=======
           <DialogTrigger asChild onClick={handleDialogOpen}>
-            <Button className="mb-4">Connect Clickhouse Database</Button>
+>>>>>>> 6a429ee (no more links)
+            <Button variant="default" className="gap-2">
+              <PlusCircle size={16} />
+              Connect Database
+            </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[500px]">
+          <DialogContent className="sm:max-w-[800px]">
             <DialogHeader>
-              <div className="mb-4" />
-              <Image src="/clickhouse.svg" alt="Clickhouse Logo" width={30} height={30} />
-              <DialogTitle>{isTableSelectionStep ? "Select a Table" : "Connect to Clickhouse"}</DialogTitle>
+              <DialogTitle>Connect Clickhouse Database</DialogTitle>
               <DialogDescription>
-                {isTableSelectionStep
-                  ? "Select a table from the connected Clickhouse database."
-                  : "Enter your Clickhouse connection details below."}
+                Enter your Clickhouse database credentials below.
               </DialogDescription>
             </DialogHeader>
-            <div className="grid gap-4 py-4">
-              {!isTableSelectionStep ? (
-                <>
-                  <Label htmlFor="host" className="text-right font-medium">Host</Label>
+            {!isTableSelectionStep && !isColumnSelectionStep ? (
+              <div className="grid gap-4 py-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="host">Host</Label>
                   <Input
                     id="host"
                     value={newWarehouse.credentials.host}
-                    onChange={(e) => setNewWarehouse({ ...newWarehouse, credentials: { ...newWarehouse.credentials, host: e.target.value } })}
+                    onChange={(e) => setNewWarehouse({
+                      ...newWarehouse,
+                      credentials: { ...newWarehouse.credentials, host: e.target.value }
+                    })}
                   />
-                  <Label htmlFor="database" className="text-right font-medium">Database</Label>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="database">Database</Label>
                   <Input
                     id="database"
                     value={newWarehouse.credentials.database}
-                    onChange={(e) => setNewWarehouse({ ...newWarehouse, credentials: { ...newWarehouse.credentials, database: e.target.value } })}
+                    onChange={(e) => setNewWarehouse({
+                      ...newWarehouse,
+                      credentials: { ...newWarehouse.credentials, database: e.target.value }
+                    })}
                   />
-                  <Label htmlFor="username" className="text-right font-medium">Username</Label>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="username">Username</Label>
                   <Input
                     id="username"
                     value={newWarehouse.credentials.username}
-                    onChange={(e) => setNewWarehouse({ ...newWarehouse, credentials: { ...newWarehouse.credentials, username: e.target.value } })}
+                    onChange={(e) => setNewWarehouse({
+                      ...newWarehouse,
+                      credentials: { ...newWarehouse.credentials, username: e.target.value }
+                    })}
                   />
-                  <Label htmlFor="password" className="text-right font-medium">Password</Label>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="password">Password</Label>
                   <Input
                     id="password"
                     type="password"
                     value={newWarehouse.credentials.password}
-                    onChange={(e) => setNewWarehouse({ ...newWarehouse, credentials: { ...newWarehouse.credentials, password: e.target.value } })}
+                    onChange={(e) => setNewWarehouse({
+                      ...newWarehouse,
+                      credentials: { ...newWarehouse.credentials, password: e.target.value }
+                    })}
                   />
-                </>
-              ) : (
-                <>
-                  <Label htmlFor="table" className="text-right font-medium">Table</Label>
-                  <Select onValueChange={setSelectedTable}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Select a table" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {tables.map((table) => (
-                        <SelectItem key={table} value={table}>
-                          {table}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </>
-              )}
-            </div>
-            {!isTableSelectionStep ? (
-              <Button onClick={handleTestConnection} className="w-full">
-                Test Connection
-              </Button>
+                </div>
+                <Button onClick={handleTestConnection}>Test Connection</Button>
+              </div>
+            ) : isTableSelectionStep ? (
+              <div className="grid gap-4 py-4">
+                <Select onValueChange={setSelectedTable}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a table" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {tables.map((table) => (
+                      <SelectItem key={table} value={table}>
+                        {table}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button onClick={fetchColumns}>Next</Button>
+              </div>
             ) : (
-              <Button onClick={handleAddWarehouse} className="w-full">
-                Connect Database
-              </Button>
+              <div className="grid gap-4 py-4">
+                <Select onValueChange={setTenancyColumn}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select tenancy column" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {columns.map((column) => (
+                      <SelectItem key={column} value={column}>
+                        {column}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button onClick={handleAddWarehouse}>Connect Warehouse</Button>
+              </div>
             )}
           </DialogContent>
         </Dialog>
       </div>
       
       {isLoading ? (
-        <p>Loading your connections...</p>
+        <div className="flex items-center justify-center h-[400px]">
+          <p className="text-muted-foreground">Loading your connections...</p>
+        </div>
       ) : error ? (
-        <p className="text-red-500">{error}</p>
+        <div className="flex items-center justify-center h-[400px]">
+          <p className="text-red-500">{error}</p>
+        </div>
       ) : (
-        <div className="space-y-6">
-        <h1 className="text-2xl md:text-3xl font-semibold">Internal Warehouses</h1>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-100">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Connection ID</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Host</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Database</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {warehouses.length > 0 ? (
-                warehouses.map((warehouse) => (
-                  <tr key={warehouse.id}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{warehouse.id}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      {warehouse.credentials?.host || 'Not available'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      {warehouse.credentials?.database || 'Not available'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <Button
-                        onClick={() => handleDelete(warehouse.id)}
-                        variant="destructive"
-                        size="sm"
-                      >
-                        Disconnect
-                      </Button>
+        <div className="rounded-lg border bg-card">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b bg-muted/50">
+<<<<<<< HEAD
+                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Host</th>
+                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Database</th>
+                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Integrate</th>
+=======
+                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Connection ID</th>
+                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Host</th>
+                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Database</th>
+>>>>>>> 6a429ee (no more links)
+                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {warehouses.length > 0 ? (
+                  warehouses.map((warehouse) => (
+                    <tr key={warehouse.id} className="border-b transition-colors hover:bg-muted/50">
+<<<<<<< HEAD
+                      <td className="p-4 align-middle">{warehouse.host}</td>
+                      <td className="p-4 align-middle">{warehouse.database}</td>
+                      <td className="p-4 align-middle">
+                        <Dialog 
+                          open={openDialogId === warehouse.id} 
+                          onOpenChange={(open) => {
+                            if (!open) handleDialogClose();
+                            else handleDialogOpen(warehouse.id);
+                          }}
+                        >
+                          <DialogTrigger asChild>
+                            <Button variant="outline" size="sm" className="gap-2">
+                              <Plug size={16} />
+                              Connect
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent className="sm:max-w-3xl">
+                            <DialogHeader>
+                              <DialogTitle>Integration Instructions</DialogTitle>
+                              <DialogDescription>
+                                Follow these steps to integrate this warehouse into your application.
+                              </DialogDescription>
+                            </DialogHeader>
+                            <div className="space-y-6">
+                              <div>
+                                <h4 className="text-sm font-medium mb-2">1. Install the SDK</h4>
+                                <Code
+                                  code="npm install @runportcullis/portcullis-react"
+                                  language="bash"
+                                  title="Terminal"
+                                />
+                              </div>
+                              
+                              <div>
+                                <h4 className="text-sm font-medium mb-2">2. Add the Export Component</h4>
+                                <Code 
+                                  code={`import { ExportWrapper } from '@runportcullis/portcullis-react';
+
+export default function App() {
+  return (
+    <ExportWrapper
+      apiKey="YOUR_API_KEY" // Replace with your actual API key
+      organizationId="${organization?.id}"
+      internalWarehouse="${warehouse.id}"
+      tableName="your-table-name" // Replace with your actual table name
+    />
+  );
+}`}
+                                  language="tsx"
+                                  title="app/page.tsx"
+                                  showLineNumbers
+                                />
+                              </div>
+                            </div>
+                          </DialogContent>
+                        </Dialog>
+                      </td>
+=======
+                      <td className="p-4 align-middle">{warehouse.id}</td>
+                      <td className="p-4 align-middle">{warehouse.credentials?.host || 'Not available'}</td>
+                      <td className="p-4 align-middle">{warehouse.credentials?.database || 'Not available'}</td>
+>>>>>>> 6a429ee (no more links)
+                      <td className="p-4 align-middle">
+                        <Button
+                          onClick={() => handleDelete(warehouse.id)}
+                          variant="destructive"
+                          size="sm"
+                          className="gap-2"
+                        >
+                          Disconnect
+                        </Button>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={4} className="h-24 text-center text-muted-foreground">
+                      No Clickhouse connections found. Click "Connect Database" to add your first connection.
                     </td>
                   </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={4} className="px-6 py-4 text-center text-gray-500">
-                    No Clickhouse connections found. Click "Connect Clickhouse Database" to add your first connection.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-        </div>
+
       )}
       <Toaster />
     </div>

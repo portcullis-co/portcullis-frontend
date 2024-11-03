@@ -1,7 +1,13 @@
+const { withContentlayer } = require("next-contentlayer")
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {
-    domains: ['img.logo.dev', 'img.clerk.com', 'cdn.brandfetch.io', 'cdn.worldvectorlogo.com'],
+    domains: ['img.logo.dev', 'img.clerk.com', 'cdn.brandfetch.io', 'cdn.worldvectorlogo.com', 'avatars.githubusercontent.com'],
+  },
+  experimental: {
+    appDir: true,
+    serverComponentsExternalPackages: ["@prisma/client"],
   },
   reactStrictMode: true,
   swcMinify: true,
@@ -11,7 +17,8 @@ const nextConfig = {
       'node-gyp': 'node-gyp',
       'utf-8-validate': 'utf-8-validate',
       'bufferutil': 'bufferutil',
-      'encoding': 'encoding'
+      'encoding': 'encoding',
+      'lz4': 'lz4'
     }];
 
     // Add fallbacks for non-server environment
@@ -22,6 +29,8 @@ const nextConfig = {
         tls: false,
         fs: false,
         crypto: false,
+        'lz4': false,
+        'xxhash': false
       };
     }
 
@@ -41,8 +50,23 @@ const nextConfig = {
       loader: 'ignore-loader'
     });
 
+    // Ignore native modules
+    config.module.rules.push({
+      test: /\.node$/,
+      use: 'node-loader',
+    });
+
+    // Add rule to ignore problematic modules
+    config.module.rules.push({
+      test: /\.(node|lz4|xxhash)$/,
+      use: 'null-loader',
+      resource: {
+        not: [/node_modules/]
+      }
+    });
+
     return config;
   },
 };
 
-module.exports = nextConfig;
+module.exports = withContentlayer(nextConfig);

@@ -137,7 +137,7 @@ export function convertClickhouseToSnowflake(clickhouseType: string, value: any)
     }
 
     // Handle Nullable types
-    if (clickhouseType.startsWith('Nullable(')) {
+    if (clickhouseType.includes('Nullable')) {
         const innerType = clickhouseType.slice(9, -1);
         console.log(`Handling Nullable type, inner type: ${innerType}`);
         return convertClickhouseToSnowflake(innerType, value);
@@ -249,10 +249,10 @@ export function convertClickhouseToSnowflake(clickhouseType: string, value: any)
 /**
  * Upserts data into Snowflake based on the link type.
  * @param snowflakePool - The Snowflake connection pool instance.
- * @param tableName - The name of the table to upsert data into.
+ * @param table - The name of the table to upsert data into.
  * @param batch - Array of records to upsert.
  */
-export async function upsertToSnowflake(snowflakePool: any, tableName: string, batch: Record<string, any>[]) {
+export async function upsertToSnowflake(snowflakePool: any, table: string, batch: Record<string, any>[]) {
     if (batch.length === 0) return;
 
     // Get all columns except metadata
@@ -295,7 +295,7 @@ export async function upsertToSnowflake(snowflakePool: any, tableName: string, b
         .map(col => `target."${col}" = source."${col}"`);
 
     const query = `
-        MERGE INTO ${tableName} AS target
+        MERGE INTO ${table} AS target
         USING (
             SELECT DISTINCT ${columns.map(col => `source."${col}"`).join(', ')}
             FROM (
@@ -337,13 +337,13 @@ export async function upsertToSnowflake(snowflakePool: any, tableName: string, b
 /**
  * Helper function to generate Snowflake CREATE TABLE SQL
  */
-export function generateSnowflakeCreateTableSQL(tableName: string, columns: { name: string; type: string }[]): string {
+export function generateSnowflakeCreateTableSQL(table: string, columns: { name: string; type: string }[]): string {
     const columnDefinitions = columns
         .map(col => `"${col.name}" ${getSnowflakeDataType(col.type)}`)
         .join(',\n    ');
 
     return `
-CREATE TABLE IF NOT EXISTS ${tableName} (
+CREATE TABLE IF NOT EXISTS ${table} (
     ${columnDefinitions}
 );`.trim();
 }

@@ -18,6 +18,8 @@ interface Credentials {
   keyFilename?: string
 }
 
+
+
 interface PipelineRequestBody {
   organization: string
   internal_warehouse: string
@@ -69,22 +71,30 @@ export async function runPipeline(
   warehouseType: string,
   rawCredentials: Credentials
 ) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-
-  if (!supabaseUrl || !supabaseServiceKey) {
-    throw new Error('Required environment variables are missing')
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return {
+      success: false,
+      message: "Missing environment configuration",
+      status: 500
+    }
   }
 
   try {
-    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false
-      }
-    })
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY
+    )
 
-    // Fetch warehouse data
+    // Validate inputs
+    if (!organization || !internal_warehouse || !warehouseType) {
+      return {
+        success: false,
+        message: "Missing required parameters",
+        status: 400
+      }
+    }
+
+    // Fetch warehouse data with error handling
     const { data: internalData, error: internalError } = await supabase
       .from('warehouses')
       .select('*')
@@ -115,25 +125,37 @@ export async function runPipeline(
     const formattedCredentials = formatWarehouseCredentials(warehouseType, rawCredentials)
     const decryptedInternalCreds = await decrypt(internalData.credentials)
 
-    const requestBody: PipelineRequestBody = {
-      organization: organization ?? '',
-      internal_warehouse,
-      link_type: warehouseType,
-      link_credentials: formattedCredentials,
-      internal_credentials: decryptedInternalCreds,
-      table_name: internalData.table_name,
-    }
+      const requestBody = {
+        organization,
+        internal_warehouse,
+        link_type: warehouseType,
+        link_credentials: formattedCredentials,
+        internal_credentials: decryptedInternalCreds,
+        table_name: internalData.table_name,
+      }
 
-    const handle = await tasks.trigger<typeof pipelineTask>("pipeline-etl", requestBody)
+      const handle = await tasks.trigger<typeof pipelineTask>("pipeline-etl", requestBody)
 
-    return {
-      success: true,
-      message: "ETL process started",
-      runId: handle.id,
-      syncId: syncData.id,
-      status: 200
+      return {
+        success: true,
+        message: "ETL process started",
+        runId: handle.id,
+        status: 200
+      }
+    } catch (error) {
+      console.error('Pipeline processing error:', error)
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : "Failed to process pipeline request",
+        status: 500
+      }
     }
   } catch (error) {
-    throw new Error(error instanceof Error ? error.message : 'Unknown error occurred')
+    console.error('Pipeline error:', error)
+    return {
+      success: false,
+      message: "An unexpected error occurred",
+      status: 500
+    }
   }
 }
