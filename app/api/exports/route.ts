@@ -72,6 +72,8 @@ export async function POST(request: Request) {
       internal_warehouse,
       internal_credentials,
       destination_type,
+      tenancy_column,
+      tenant_id,
       destination_name,
       table,
       credentials,
@@ -121,7 +123,7 @@ export async function POST(request: Request) {
           internal_credentials: decryptedCredentials,
           destination_credentials: credentials,
           organization: body.organization,
-          query: body.query || "SELECT * FROM your_table",
+          query: `SELECT * FROM ${table} WHERE ${tenancy_column} = '${tenant_id}'`,
           destination_type: destination_type,
           table: table,
           scheduled_at: scheduled_at

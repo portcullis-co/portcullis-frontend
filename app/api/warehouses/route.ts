@@ -108,10 +108,10 @@ export async function POST(request: Request) {
   }
   
   try {
-    const { credentials, tableName } = await request.json();
+    const { internal_credentials, table_name, tenancy_column, tenant_id } = await request.json();
     
     // Encrypt credentials before storing
-    const encryptedCredentials = await encrypt(credentials);
+    const encryptedCredentials = await encrypt(internal_credentials);
     
     const { data, error } = await supabase
       .from('warehouses')
@@ -119,7 +119,9 @@ export async function POST(request: Request) {
         internal_credentials: encryptedCredentials,
         organization: orgId, 
         slug,
-        table_name: tableName,
+        table_name,
+        tenancy_column,
+        tenant_id
       })
       .select()
       .single();
@@ -129,13 +131,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Failed to insert warehouse' }, { status: 500 });
     }
 
-    // Decrypt credentials before sending response
-    const decryptedData = { 
-      ...data, 
-      credentials: await decrypt(data.credentials) 
-    };
-
-    return NextResponse.json({ data: decryptedData });
+    // Don't decrypt here since we just encrypted it
+    return NextResponse.json({ data });
   } catch (error) {
     console.error('Unexpected error:', error);
     return NextResponse.json({ error: 'An unexpected error occurred' }, { status: 500 });
