@@ -226,10 +226,6 @@ export default function InternalWarehouseListPage() {
         username: newWarehouse.credentials.username,
         password: newWarehouse.credentials.password,
         database: newWarehouse.credentials.database,
-        compression: {
-          response: false,
-          request: false
-        }
       });
 
       // Test the connection
@@ -526,6 +522,7 @@ export default function App() {
       organizationId="${organization?.id}"
       internalWarehouse="${warehouse.id}"
       tableName="your-table-name" // Replace with your actual table name
+      tenantId="your-tenant-id" // Replace with your actual tenant ID
     />
   );
 }`}

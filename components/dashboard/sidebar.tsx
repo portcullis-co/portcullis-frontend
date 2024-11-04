@@ -2,6 +2,7 @@
 import React, { useState } from 'react'
 import Link from 'next/link'
 import { Home, Database, ArrowRightLeft, Settings, PlusCircle, CreditCard } from 'lucide-react'
+import Image from 'next/image'
 import Logo from "@/public/portcullis.svg"
 import { Button } from '@/components/ui/button'
 import { useRouter } from 'next/navigation';
@@ -26,7 +27,7 @@ const Sidebar: React.FC<SidebarProps> = ({ openWarehouseConnection, openAppsConn
       </button>
       <div className={`bg-grey border text-black w-64 space-y-6 py-7 px-2 absolute inset-y-0 left-0 transform ${isOpen ? 'translate-x-0' : '-translate-x-full'} md:relative md:translate-x-0 transition duration-200 ease-in-out flex flex-col z-10`}>
       <div className="flex items-center justify-start px-4 space-x-3">
-        <Logo className="w-10 h-10" />
+        <Image src={Logo} alt="Portcullis Logo" className="w-10 h-10" />
         <span className="text-3xl font-bold tracking-tight">Portcullis</span>
       </div>
       
@@ -41,15 +42,9 @@ const Sidebar: React.FC<SidebarProps> = ({ openWarehouseConnection, openAppsConn
           <Database className="inline-block mr-2" size={20} />
           Internal Warehouses
         </Link>
-<<<<<<< HEAD
         <Link href="/exports" className="block py-2.5 px-4 rounded transition duration-200 hover:bg-gray-800 hover:text-white">
           <ArrowRightLeft className="inline-block mr-2" size={20} />
           Exports
-=======
-        <Link href="/destinations" className="block py-2.5 px-4 rounded transition duration-200 hover:bg-gray-800 hover:text-white">
-          <ArrowRightLeft className="inline-block mr-2" size={20} />
-          Destinations
->>>>>>> 6a429ee (no more links)
         </Link>
         <Link href="/settings" className="block py-2.5 px-4 rounded transition duration-200 hover:bg-gray-800 hover:text-white">
           <Settings className="inline-block mr-2" size={20} />

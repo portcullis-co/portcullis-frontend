@@ -43,8 +43,10 @@ export default function SDKTestPage() {
             <ExportWrapper 
               apiKey={apiKey}
               organizationId={organization.id}
-              internalWarehouse="34b9bd83-9439-4677-9d0f-e2c6d817e1d1"
-              tableName='test_table'
+              internalWarehouse="0aff5b5d-a4e2-419d-99e1-be1019728cbc"
+              tableName='dummy_data'
+              tenancyId="org_5131c56fa5ff41df97cc1b1c890"
+              tenancyColumn="org_id"
             />
           ) : (
             <p className="text-yellow-600">

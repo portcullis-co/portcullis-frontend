@@ -8,7 +8,7 @@ export async function validateApiKey(apiKey: string | null): Promise<{
     return { isValid: false };
   }
 
-  const supabase = createClient();
+  const supabase = createClient(); // TODO: Maybe use RDS instead
   
   const { data, error } = await supabase
     .from('organizations')
