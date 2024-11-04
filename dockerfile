@@ -19,8 +19,8 @@ COPY . .
 # Build the Next.js application
 RUN pnpm run build
 
-# Expose the port that the application will run on
-EXPOSE 3000
+# Expose both the Next.js and Inngest ports
+EXPOSE 3000 8288
 
 # Use an entrypoint script to handle environment variables
 COPY entrypoint.sh /entrypoint.sh

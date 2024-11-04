@@ -32,7 +32,7 @@ export async function OPTIONS(request: Request) {
 }
 
 export async function GET(request: Request) {
-  const supabase = createClient();
+  const supabase = createClient(); // TODO: Maybe use RDS instead
   const { searchParams } = new URL(request.url);
   const organizationId = searchParams.get('organizationId');
   const id = searchParams.get('id');
@@ -70,7 +70,7 @@ export async function GET(request: Request) {
   // Handle fetch by organizationId
   if (organizationId) {
     try {
-      const { data: warehouses, error } = await supabase
+      const { data: warehouses, error } = await supabase // TODO: Maybe use RDS instead
         .from('warehouses')
         .select('*')
         .eq('organization', organizationId);
@@ -140,7 +140,7 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const supabase = createClient();
+  const supabase = createClient(); // TODO: Maybe use RDS instead
   const { id } = await request.json();
 
   const { error } = await supabase

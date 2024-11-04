@@ -32,7 +32,7 @@ const createLinkSchema = z.object({
 
 export async function POST(request: Request) {
   try {
-    const supabase = createClient();
+    const supabase = createClient(); // TODO: Maybe use RDS instead
     const { userId, orgId } = auth();
     const { logo, redirectUrl, internal_warehouse, recipient_email, password } = await request.json();
     const encrypted_password = await encrypt(password);
@@ -43,7 +43,7 @@ export async function POST(request: Request) {
 
     const invite_token = nanoid(10);
 
-    const { data, error } = await supabase
+    const { data, error } = await supabase // TODO: Maybe use RDS instead
       .from('links')
       .insert({ 
         invite_token,

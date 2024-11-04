@@ -22,7 +22,7 @@ primary_region = 'atl'
   min_machines_running = 0
   processes = ['app']
 
-# Add these network settings
+# Main service for Next.js
 [[services]]
   protocol = "tcp"
   internal_port = 3000
@@ -35,12 +35,21 @@ primary_region = 'atl'
     port = 80
     handlers = ["http"]
 
-# Add Snowflake ports if needed
+# Inngest service
+[[services]]
+  protocol = "tcp"
+  internal_port = 8288
+  processes = ["app"]
+  
   [[services.ports]]
-    port = 443
-    handlers = ["tls"]
+    port = 8288
+    handlers = ["tls", "http"]
 
 [[vm]]
   memory = '4gb'
   cpu_kind = 'shared'
   cpus = 2
+
+[env]
+  INNGEST_SERVE_HOST = "https://portcullis-app.fly.dev"
+  INNGEST_BASE_URL = "/api/inngest"

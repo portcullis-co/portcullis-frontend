@@ -4,13 +4,16 @@ import { auth } from '@clerk/nextjs/server';
 import { validateApiKey } from '@/lib/validateApiKey';
 import { encrypt, decrypt } from '@/lib/encryption';
 import type { ClickhouseCredentials } from '@/lib/common/types/clickhouse.d';
-import type { clickhouseToSnowflakeSync } from "@/app/trigger/trigger-export";
-import { tasks } from "@trigger.dev/sdk/v3";
-import Analytics from '@segment/analytics-node';
+import { serve } from "inngest/next";
+import { clickhouseToSnowflakeSync } from "@/app/inngest/functions/clickhouseToSnowflakeSync"; // Create this file
+import { inngest } from "@/app/inngest/client";
+
 
 const allowedOrigins = [
   'http://localhost:3000',
   'https://portcullis-app.fly.dev',
+  'https://portcullis-app.fly.dev/api/exports',
+  'https://app.inngest.com/'
 ];
 
 function corsHeaders(origin: string | null) {
@@ -111,8 +114,19 @@ export async function POST(request: Request) {
       try {
         console.log('Fetching warehouse with ID:', internal_warehouse);
 
+        // First fetch the warehouse credentials from Supabase
+        const { data: warehouseData, error: warehouseError } = await supabase
+          .from('warehouses')
+          .select('credentials, id')
+          .eq('id', internal_warehouse)
+          .single();
+
+        if (warehouseError || !warehouseData) {
+          throw new Error(`Failed to fetch warehouse credentials: ${warehouseError?.message || 'No data found'}`);
+        }
+
         // Decrypt the internal warehouse credentials
-        const decryptedCredentials = await decrypt(internal_credentials);
+        const decryptedCredentials = await decrypt(warehouseData.credentials);
 
         // Add error handling for client initialization
         if (!process.env.TRIGGER_SECRET_KEY) {
@@ -128,20 +142,31 @@ export async function POST(request: Request) {
           destination_type: destination_type,
           table: table,
           scheduled_at: scheduled_at
-        }
+        };
+
+        // Send event to trigger Inngest function
         switch (destination_type) {
-          case "snowflake":
-            await tasks.trigger<typeof clickhouseToSnowflakeSync>(
-              "clickhouse-snowflake-sync",
-              payload
-            );
-            console.log("Successfully scheduled Snowflake export task");
+          case 'snowflake':
+            await inngest.send({
+              name: "event/clickhouse-to-snowflake-sync",
+              data: payload,
+            });
             break;
-          // Add other cases here as needed
-          default:
-            throw new Error(`Unsupported destination type: ${destination_type}`);
+          case 'bigquery':
+            await inngest.send({
+              name: "event/clickhouse-to-bigquery-sync",
+              data: payload,
+            });
+            break;
+          case 'redshift':
+            await inngest.send({
+              name: "event/clickhouse-to-redshift-sync",
+              data: payload,
+            });
+            break;
         }
 
+        console.log("Successfully scheduled export task");
       } catch (error) {
         console.error('Trigger event error:', error);
         return NextResponse.json({ 
