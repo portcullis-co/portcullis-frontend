@@ -277,77 +277,157 @@ export const clickhouseToSnowflakeSync = inngest.createFunction(
 );
 
 function convertValue(value: any, destType: string): any {
-    if (value === null || value === undefined) return null;
-    
-    switch (destType.toUpperCase()) {
-      // String types
-      case 'VARCHAR':
-      case 'STRING':
-      case 'TEXT':
-      case 'CHAR':
-      case 'CHARACTER':
-        return String(value);
+  // Early return for null/undefined values
+  if (value === null || value === undefined) return null;
   
-      // Integer types
-      case 'INTEGER':
-      case 'INT':
-      case 'BIGINT':
-      case 'SMALLINT':
-        return Number.isInteger(Number(value)) ? Number(value) : Math.floor(Number(value));
+  // Handle case where destType is null/undefined
+  if (!destType) {
+      console.warn('Destination type is undefined, defaulting to STRING');
+      return String(value);
+  }
   
-      // Floating point types
-      case 'FLOAT':
-      case 'DOUBLE':
-      case 'DECIMAL':
-      case 'NUMERIC':
-      case 'REAL':
-        return Number(value);
+  // Normalize the type string
+  const normalizedType = destType.toString().toUpperCase();
   
-      // Boolean type
-      case 'BOOLEAN':
-      case 'BOOL':
-        return Boolean(value);
-  
-      // Date/Time types
-      case 'TIMESTAMP':
-      case 'DATETIME':
-        return value instanceof Date 
-          ? value.toISOString()
-          : new Date(value).toISOString();
+  try {
+      switch (normalizedType) {
+          // String types
+          case 'VARCHAR':
+          case 'STRING':
+          case 'TEXT':
+          case 'CHAR':
+          case 'CHARACTER':
+              return String(value);
       
-      case 'DATE':
-        return value instanceof Date 
-          ? value.toISOString().split('T')[0]
-          : new Date(value).toISOString().split('T')[0];
-  
-      // Array types
-      case 'ARRAY':
-        return Array.isArray(value) ? value : [value];
-  
-      // JSON types
-      case 'JSON':
-      case 'JSONB':
-        return typeof value === 'string' ? JSON.parse(value) : JSON.stringify(value);
-  
-      // Default case
-      default:
-        return value;
-    }
+          // Integer types
+          case 'INTEGER':
+          case 'INT':
+          case 'BIGINT':
+          case 'SMALLINT':
+              return Number.isInteger(Number(value)) ? Number(value) : Math.floor(Number(value));
+      
+          // Floating point types
+          case 'FLOAT':
+          case 'DOUBLE':
+          case 'DECIMAL':
+          case 'NUMERIC':
+          case 'REAL':
+              return Number(value);
+      
+          // Boolean type
+          case 'BOOLEAN':
+          case 'BOOL':
+              return Boolean(value);
+      
+          // Date/Time types
+          case 'TIMESTAMP':
+          case 'DATETIME':
+              try {
+                  return value instanceof Date 
+                      ? value.toISOString()
+                      : new Date(value).toISOString();
+              } catch (e) {
+                  console.warn(`Invalid date value: ${value}, returning null`);
+                  return null;
+              }
+          
+          case 'DATE':
+              try {
+                  return value instanceof Date 
+                      ? value.toISOString().split('T')[0]
+                      : new Date(value).toISOString().split('T')[0];
+              } catch (e) {
+                  console.warn(`Invalid date value: ${value}, returning null`);
+                  return null;
+              }
+      
+          // Array types
+          case 'ARRAY':
+              return Array.isArray(value) ? value : [value];
+      
+          // JSON/Object types
+          case 'OBJECT':
+          case 'VARIANT':
+          case 'JSON':
+              try {
+                  return typeof value === 'string' ? value : JSON.stringify(value);
+              } catch (e) {
+                  console.warn(`Failed to stringify value: ${value}, returning null`);
+                  return null;
+              }
+      
+          // Default case
+          default:
+              console.warn(`Unknown type ${normalizedType}, converting to string`);
+              return String(value);
+      }
+  } catch (error) {
+      console.error(`Error converting value: ${value} to type: ${normalizedType}`, error);
+      return null;
   }
-  
-async function getClickhouseTableSchema(clickhouse: any, table: string) {
-  const schemaResult = await clickhouse.query({
-    query: `DESCRIBE ${table}`,
-    format: 'JSONEachRow'
-  });
-
-  const columns = [];
-  for await (const row of schemaResult.stream()) {
-    columns.push({
-      name: row.name,
-      type: row.type
-    });
-  }
-  return columns;
 }
-  
+
+async function getClickhouseTableSchema(clickhouse: any, table: string) {
+  try {
+      console.log(`Active Table: ${table}`)
+      const schemaResult = await clickhouse.query({
+          query: `DESCRIBE ${table}`,
+          format: 'JSONEachRow'
+      });
+
+      const columns = [];
+      let hasValidRows = false; // Track if we have valid rows
+
+      for await (const row of schemaResult.stream()) {
+          hasValidRows = true; // We have at least one row
+          try {
+            console.log(`Schema result: ${schemaResult}`)
+              // Parse the text property if it exists
+              const schemaRow = row.text ? JSON.parse(row.text) : row;
+              
+              if (!schemaRow || !schemaRow.name || !schemaRow.type) {
+                  console.warn('Invalid schema row after parsing:', schemaRow);
+                  continue;
+              }
+
+              let type = schemaRow.type.toString();
+              
+              // Handle special types
+              if (type.toLowerCase().includes('json')) {
+                  type = 'JSON';
+              }
+              else if (type.startsWith('Array(')) {
+                  type = 'ARRAY';
+              }
+              else if (type === 'UUID') {
+                  type = 'STRING'; // Convert UUID to STRING for Snowflake compatibility
+              }
+              else if (type === 'DateTime') {
+                  type = 'TIMESTAMP';
+              }
+              
+              columns.push({
+                  name: schemaRow.name,
+                  type: type
+              });
+          } catch (parseError) {
+              console.error('Error parsing schema row:', parseError, row);
+              continue;
+          }
+      }
+
+      if (!hasValidRows) {
+          throw new Error(`No valid columns found for table: ${table}. Please check if the table exists and has a valid schema.`);
+      }
+
+      if (columns.length === 0) {
+          throw new Error(`No valid columns found for table: ${table}. Please check if the table exists and has a valid schema.`);
+      }
+
+      console.log('Successfully parsed schema:', columns);
+      return columns;
+  } catch (error) {
+      console.error(`Error getting schema for table ${table}:`, error);
+      throw error;
+  }
+}
