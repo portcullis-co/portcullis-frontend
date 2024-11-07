@@ -52,4 +52,3 @@ primary_region = 'atl'
 
 [env]
   INNGEST_SERVE_HOST = "https://portcullis-app.fly.dev"
-  INNGEST_BASE_URL = "/api/inngest"

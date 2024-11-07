@@ -126,23 +126,36 @@ export async function POST(request: Request) {
         }
 
         // Decrypt the internal warehouse credentials
-        const decryptedCredentials = await decrypt(warehouseData.credentials);
-
-        // Add error handling for client initialization
-        if (!process.env.TRIGGER_SECRET_KEY) {
-          throw new Error('TRIGGER_SECRET_KEY environment variable is not set');
-        }
 
         const payload = {
           internal_warehouse: internal_warehouse,
-          internal_credentials: decryptedCredentials,
+          internal_credentials: warehouseData.credentials,
           destination_credentials: credentials,
           organization: body.organization,
-          query: `SELECT * FROM ${table} WHERE ${tenancy_column} = '${tenant_id}'`,
+          query: tenancy_column && tenant_id 
+            ? `SELECT * FROM ${table} WHERE ${tenancy_column} = '${tenant_id}'`
+            : `SELECT * FROM ${table}`,
           destination_type: destination_type,
           table: table,
           scheduled_at: scheduled_at
         };
+
+        // Validate credentials before sending
+        if (destination_type === 'snowflake') {
+          if (!credentials.account || !credentials.username || !credentials.password) {
+            throw new Error('Invalid Snowflake credentials');
+          }
+          
+          // Clean up account URL and create new credentials object
+          const cleanedCredentials = {
+            ...credentials,
+            account: credentials.account.replace(/\.snowflakecomputing\.com$/, '')
+          };
+          
+          payload.destination_credentials = cleanedCredentials;
+        }
+
+        console.log('Inngest Event Key present:', !!process.env.INNGEST_EVENT_KEY);
 
         // Send event to trigger Inngest function
         switch (destination_type) {
