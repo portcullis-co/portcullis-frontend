@@ -50,5 +50,13 @@ type Events = {
 // Create and export the Inngest client
 export const inngest = new Inngest({
   id: "portcullis-app",
+  eventKey: process.env.INNGEST_EVENT_KEY!,
   schemas: new EventSchemas().fromRecord<Events>(),
 }); 
+
+console.log(process.env.INNGEST_EVENT_KEY);
+
+// Add error handling for client initialization
+if (!process.env.INNGEST_EVENT_KEY) {
+  throw new Error('INNGEST_EVENT_KEY environment variable is not set');
+}

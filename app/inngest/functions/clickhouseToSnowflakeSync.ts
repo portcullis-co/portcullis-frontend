@@ -1,4 +1,3 @@
-import { logger } from "@trigger.dev/sdk/v3";
 import { inngest } from "../client";
 import type { ClickhouseCredentials, SnowflakeCredentials } from '@/lib/common/types/clickhouse.d';
 import { decrypt } from "@/lib/encryption";
@@ -7,6 +6,9 @@ import Snowflake from 'snowflake-sdk';
 import { EventSchemas, Inngest } from 'inngest';
 import { Analytics } from '@segment/analytics-node';
 import { clickhouseToSnowflake } from '@/lib/common/types/clickhouse';
+import { url } from "inspector";
+import { json } from "stream/consumers";
+import { generateSnowflakeCreateTableSQL } from "@/lib/conversions";
 
 // Add type definition
 interface SnowflakeSyncPayload {
@@ -28,132 +30,247 @@ export const clickhouseToSnowflakeSync = inngest.createFunction(
   },
   async ({ event, step }) => {
     const payload = event.data as SnowflakeSyncPayload;
+    
     return await step.run("sync-data", async () => {
-      const decryptedCredentials = typeof payload.internal_credentials === 'string'
-        ? await decrypt(payload.internal_credentials)
-        : payload.internal_credentials;
-
-      const clickhouse = createClickhouseClient({
-        host: decryptedCredentials.host,
-        username: decryptedCredentials.username,
-        password: decryptedCredentials.password,
-        database: decryptedCredentials.database,
-        request_timeout: 30000,
-      });
-
-      // Validate Snowflake credentials
-      if (!payload.destination_credentials.account || 
-          !payload.destination_credentials.username || 
-          !payload.destination_credentials.password) {
-        throw new Error('Invalid Snowflake credentials');
-      }
-
-      // Initialize Snowflake connection with additional options
-      const snowflake = Snowflake.createConnection({
-        account: payload.destination_credentials.account,
-        username: payload.destination_credentials.username,
-        password: payload.destination_credentials.password,
-        warehouse: payload.destination_credentials.warehouse,
-        database: payload.destination_credentials.database,
-        schema: payload.destination_credentials.schema,
-        // Add connection options
-        timeout: 30,
-        validateDefaultParameters: true,
-      });
-
-      // Connect to Snowflake with proper error handling
-      await new Promise((resolve, reject) => {
-        snowflake.connect((err, conn) => {
-          if (err) {
-            logger.error("Snowflake connection failed", { 
-              error: err,
-              account: payload.destination_credentials.account 
-            });
-            reject(err);
-          } else {
-            resolve(conn);
-          }
-        });
-      });
-
       try {
-        // Stream data from Clickhouse
-        const resultStream = await clickhouse.query({
-          query: payload.query,
-          format: 'JSONEachRow',
-          clickhouse_settings: {
-            wait_end_of_query: 1
-          }
-        });
+        // Handle credentials decryption      
 
-        logger.info("Starting data sync", { 
-          source: "Clickhouse", 
-          destination: "Snowflake",
-          table: payload.table 
-        });
+        const internal_credentials = payload.internal_credentials;
 
-        // Process the stream in chunks
-        for await (const rows of resultStream.stream()) {
-          // Transform data types using the mapping
-          const transformedRows = rows.map((row: any) => {
-            const transformed: any = {};
-            for (const [key, value] of Object.entries(row)) {
-              // Get Clickhouse type and convert to Snowflake type
-              const chType = typeof value; // You'd need proper type detection here
-              const sfType = clickhouseToSnowflake.get(chType) || 'VARCHAR';
-              transformed[key] = convertValue(value, sfType);
+        let decryptedCredentials;
+        
+        if (typeof payload.internal_credentials === 'string') {
+          console.log('Raw internal_credentials:', payload.internal_credentials);
+          // First decryption
+          let decrypted = await decrypt(payload.internal_credentials);
+          
+          // Keep decrypting until we get a valid JSON or hit a limit
+          let attempts = 0;
+          const MAX_DECRYPT_ATTEMPTS = 3;
+          
+          while (attempts < MAX_DECRYPT_ATTEMPTS) {
+            try {
+              // Try to parse as JSON
+              decryptedCredentials = JSON.parse(decrypted);
+              break;
+            } catch (e) {
+              // If parsing fails, try decrypting again
+              console.log(`Decryption attempt ${attempts + 1}:`, decrypted);
+              decrypted = await decrypt(decrypted);
+              attempts++;
             }
-            return transformed;
-          });
+          }
+          
+          if (!decryptedCredentials) {
+            throw new Error(`Failed to decrypt credentials after ${MAX_DECRYPT_ATTEMPTS} attempts`);
+          }
+        } else {
+          decryptedCredentials = {
+            host: await decrypt(payload.internal_credentials.host),
+            username: await decrypt(payload.internal_credentials.username),
+            password: await decrypt(payload.internal_credentials.password),
+            database: await decrypt(payload.internal_credentials.database),
+          };
+        }
 
-          // Batch insert into Snowflake
+        console.log("Connecting to ClickHouse", { 
+          host: decryptedCredentials.host,
+          username: decryptedCredentials.username,
+          database: decryptedCredentials.database,
+          password: decryptedCredentials.password
+        });
+
+        const clickhouse = createClickhouseClient({
+          url: decryptedCredentials.host,
+          username: decryptedCredentials.username,
+          password: decryptedCredentials.password,
+          database: decryptedCredentials.database,
+          request_timeout: 30000,
+        });
+
+        // Test the connection before proceeding
+        await clickhouse.ping();
+        console.log("Successfully connected to ClickHouse");
+
+        // Validate Snowflake credentials
+        const { account, username, password, warehouse, database, schema } = payload.destination_credentials;
+        
+        if (!account || !username || !password) {
+          throw new Error('Missing required Snowflake credentials');
+        }
+
+        // Add debug logging
+        console.log("Initializing Snowflake connection", {
+          account: payload.destination_credentials.account,
+          username: payload.destination_credentials.username,
+          warehouse: payload.destination_credentials.warehouse,
+          database: payload.destination_credentials.database,
+          schema: payload.destination_credentials.schema
+        });
+
+        // Initialize Snowflake connection with additional options
+        const snowflake = Snowflake.createConnection({
+          account: payload.destination_credentials.account,
+          username: payload.destination_credentials.username,
+          password: payload.destination_credentials.password,
+          warehouse: payload.destination_credentials.warehouse,
+          database: payload.destination_credentials.database,
+          schema: payload.destination_credentials.schema,
+        });
+
+        // Connect to Snowflake with proper error handling
+        await new Promise((resolve, reject) => {
+          snowflake.connect((err, conn) => {
+            if (err) {
+              console.error("Snowflake connection failed", { 
+                error: err,
+                account: payload.destination_credentials.account 
+              });
+              reject(err);
+            } else {
+              resolve(conn);
+            }
+          });
+        });
+
+        try {
+          // Get Clickhouse schema
+          const schema = await getClickhouseTableSchema(clickhouse, payload.table);
+          
+          // Generate and execute CREATE TABLE statement
+          const createTableSQL = generateSnowflakeCreateTableSQL(payload.table, schema);
+          
           await new Promise((resolve, reject) => {
             snowflake.execute({
-              sqlText: `INSERT INTO ${payload.table} SELECT * FROM TABLE(RESULT_SCAN(?))`,
-              binds: [JSON.stringify(transformedRows)],
-              complete: (err, stmt) => {
-                if (err) reject(err);
-                else resolve(stmt);
+              sqlText: createTableSQL,
+              complete: (err: any, stmt: any) => {
+                if (err) {
+                  console.error("Error creating table:", err);
+                  reject(err);
+                } else {
+                  console.log("Table created or verified successfully");
+                  resolve(stmt);
+                }
               }
             });
           });
 
-          logger.info("Processed batch", { 
-            rowCount: transformedRows.length 
+          // Stream data from Clickhouse
+          const resultStream = await clickhouse.query({
+            query: payload.query,
+            format: 'JSONEachRow',
+            clickhouse_settings: {
+              wait_end_of_query: 1
+            }
           });
-        }
 
-        let analytics: Analytics | null = null;
-        if (process.env.SEGMENT_WRITE_KEY) {
-          analytics = new Analytics({ writeKey: process.env.SEGMENT_WRITE_KEY });
-        } else {
-          console.warn('SEGMENT_WRITE_KEY not found in environment variables');
-        }
-
-        analytics?.track({
-          userId: payload.organization,
-          event: "clickhouse-snowflake-sync",
-          properties: {
-            table: payload.table,
-            revenue: 250,
-            organization: payload.organization,
+          console.log("Starting data sync", { 
+            source: "Clickhouse", 
             destination: "Snowflake",
-          }
-        });
+            table: payload.table 
+          });
 
-        return { success: true };
+          // Process the stream in batches
+          const BATCH_SIZE = 1000;
+          let batch: Record<string, any>[] = [];
+
+          for await (const row of resultStream.stream()) {
+            batch.push(row);
+            
+            if (batch.length >= BATCH_SIZE) {
+              await new Promise((resolve, reject) => {
+                // First, get the column names from the first row
+                const columns = Object.keys(batch[0]);
+                const placeholders = columns.map(() => '?').join(', ');
+                const columnList = columns.map(col => `"${col}"`).join(', ');
+                
+                snowflake.execute({
+                  sqlText: `
+                    INSERT INTO ${payload.table} (${columnList})
+                    SELECT ${columnList}
+                    FROM (
+                      SELECT * FROM (VALUES ${batch.map(() => `(${placeholders})`).join(', ')})
+                      AS t(${columnList})
+                    )
+                  `,
+                  binds: batch.flatMap(row => columns.map(col => convertValue(row[col], typeof row[col]))),
+                  complete: (err, stmt, rows) => {
+                    if (err) {
+                      console.error("Error inserting batch:", err);
+                      reject(err);
+                    } else {
+                      console.log(`Inserted ${batch.length} rows`);
+                      resolve(rows);
+                    }
+                  }
+                });
+              });
+              
+              batch = [];
+            }
+          }
+
+          // Insert any remaining rows
+          if (batch.length > 0) {
+            await new Promise((resolve, reject) => {
+              const columns = Object.keys(batch[0]);
+              const placeholders = columns.map(() => '?').join(', ');
+              const columnList = columns.map(col => `"${col}"`).join(', ');
+              
+              snowflake.execute({
+                sqlText: `
+                  INSERT INTO ${payload.table} (${columnList})
+                  SELECT ${columnList}
+                  FROM (
+                    SELECT * FROM (VALUES ${batch.map(() => `(${placeholders})`).join(', ')})
+                    AS t(${columnList})
+                  )
+                `,
+                binds: batch.flatMap(row => columns.map(col => convertValue(row[col], typeof row[col]))),
+                complete: (err, stmt, rows) => {
+                  if (err) {
+                    console.error("Error inserting final batch:", err);
+                    reject(err);
+                  } else {
+                    console.log(`Inserted final ${batch.length} rows`);
+                    resolve(rows);
+                  }
+                }
+              });
+            });
+          }
+
+          let analytics: Analytics | null = null;
+          if (process.env.SEGMENT_WRITE_KEY) {
+            analytics = new Analytics({ writeKey: process.env.SEGMENT_WRITE_KEY });
+          } else {
+            console.warn('SEGMENT_WRITE_KEY not found in environment variables');
+          }
+
+          analytics?.track({
+            userId: payload.organization,
+            event: "clickhouse-snowflake-sync",
+            properties: {
+              table: payload.table,
+              revenue: 250,
+              organization: payload.organization,
+              destination: "Snowflake",
+            }
+          });
+
+          return { success: true };
+        } catch (error) {
+          console.error("Sync failed", { error });
+          throw error;
+        } finally {
+          await clickhouse.close();
+          await new Promise((resolve) => snowflake.destroy(resolve));
+        }
       } catch (error) {
-        logger.error("Sync failed", { 
+        console.error("Error in sync-data step", { 
           error,
-          account: payload.destination_credentials.account,
-          query: payload.query
         });
         throw error;
-      } finally {
-        await clickhouse.close();
-        snowflake.destroy((err: any) => {
-          if (err) logger.error("Error destroying Snowflake connection", { error: err });
-        });
       }
     });
   }
@@ -217,4 +334,20 @@ function convertValue(value: any, destType: string): any {
         return value;
     }
   }
+  
+async function getClickhouseTableSchema(clickhouse: any, table: string) {
+  const schemaResult = await clickhouse.query({
+    query: `DESCRIBE ${table}`,
+    format: 'JSONEachRow'
+  });
+
+  const columns = [];
+  for await (const row of schemaResult.stream()) {
+    columns.push({
+      name: row.name,
+      type: row.type
+    });
+  }
+  return columns;
+}
   
