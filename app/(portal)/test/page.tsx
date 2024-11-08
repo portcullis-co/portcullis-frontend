@@ -9,6 +9,7 @@ export default function SDKTestPage() {
   const { organization, isLoaded } = useOrganization();
   const apiKey = process.env.NEXT_PUBLIC_PORTCULLIS_API_KEY;
   const [mounted, setMounted] = useState(false);
+  const orgId = useOrganization().organization?.id
 
   useEffect(() => {
     setMounted(true);
@@ -45,8 +46,7 @@ export default function SDKTestPage() {
               organizationId={organization.id}
               internalWarehouse="0aff5b5d-a4e2-419d-99e1-be1019728cbc"
               tableName='dummy_data'
-              tenancyId="org_5131c56fa5ff41df97cc1b1c890"
-              tenancyColumn="org_id"
+              tenancyColumn={orgId}
             />
           ) : (
             <p className="text-yellow-600">
