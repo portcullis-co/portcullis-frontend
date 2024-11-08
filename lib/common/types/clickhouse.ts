@@ -16,7 +16,7 @@ export const clickhouseToSnowflake: TypeMappings = new Map([
     ['JSON', 'OBJECT'],
     ['Array', 'ARRAY'],
     ['Binary', 'BINARY'],
-    ['default', 'VARCHAR(16777216)']
+    ['default', 'VARCHAR(MAX)']
 ]);
 
 export const clickhouseToBigQuery: TypeMappings = new Map([
