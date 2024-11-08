@@ -3,10 +3,11 @@ import { createClient } from '@/lib/supabase/server';
 import { auth } from '@clerk/nextjs/server';
 import { validateApiKey } from '@/lib/validateApiKey';
 import { encrypt, decrypt } from '@/lib/encryption';
-import type { ClickhouseCredentials } from '@/lib/common/types/clickhouse.d';
+import type { ClickhouseCredentials, WarehouseDataType } from '@/lib/common/types/clickhouse.d';
 import { serve } from "inngest/next";
 import { clickhouseToSnowflakeSync } from "@/app/inngest/functions/clickhouseToSnowflakeSync"; // Create this file
 import { inngest } from "@/app/inngest/client";
+import { ExportComponentProps } from '@runportcullis/portcullis-react';
 
 
 const allowedOrigins = [
@@ -52,8 +53,7 @@ export async function POST(request: Request) {
     console.log('Received API Key:', apiKey); // Be careful not to log actual keys in production
     
     const body = await request.json();
-    console.log('Request body:', body);
-    
+
     // Validate API key if present
     if (apiKey) {
       const { isValid, organizationId } = await validateApiKey(apiKey);
@@ -77,12 +77,22 @@ export async function POST(request: Request) {
       internal_credentials,
       destination_type,
       tenancy_column,
-      tenant_id,
       destination_name,
       table,
       credentials,
       scheduled_at 
     } = body;
+
+    const { tenancyColumn, tenancyIdentifier } = body as ExportComponentProps;
+    console.log('Request body:', body);
+    console.log('Tenancy Column:', tenancyColumn); // Debug log
+
+    let query;
+    if (tenancyColumn && tenancyIdentifier) {
+      query = `SELECT * FROM ${table} WHERE ${tenancyColumn} = '${tenancyIdentifier}'`;
+    } else {
+      query = `SELECT * FROM ${table}`;
+    }
 
     // Validate required fields
     if (!internal_warehouse || !destination_type || !destination_name || !table || !credentials || !internal_credentials) {
@@ -117,7 +127,7 @@ export async function POST(request: Request) {
         // First fetch the warehouse credentials from Supabase
         const { data: warehouseData, error: warehouseError } = await supabase
           .from('warehouses')
-          .select('credentials, id')
+          .select('internal_credentials, id')
           .eq('id', internal_warehouse)
           .single();
 
@@ -129,13 +139,11 @@ export async function POST(request: Request) {
 
         const payload = {
           internal_warehouse: internal_warehouse,
-          internal_credentials: warehouseData.credentials,
+          internal_credentials: warehouseData.internal_credentials,
           destination_credentials: credentials,
           organization: body.organization,
-          query: tenancy_column && tenant_id 
-            ? `SELECT * FROM ${table} WHERE ${tenancy_column} = '${tenant_id}'`
-            : `SELECT * FROM ${table}`,
-          destination_type: destination_type,
+          query: query,
+          destination_type: destination_type as WarehouseDataType,
           table: table,
           scheduled_at: scheduled_at
         };

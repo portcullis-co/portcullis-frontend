@@ -1,7 +1,7 @@
 'use client';
 
 import { useOrganization } from '@clerk/nextjs';
-import { ExportWrapper } from '@runportcullis/portcullis-react';
+import { ExportComponent } from '@runportcullis/portcullis-react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useEffect, useState } from 'react';
 
@@ -41,12 +41,13 @@ export default function SDKTestPage() {
         </CardHeader>
         <CardContent>
           {organization ? (
-            <ExportWrapper 
+            <ExportComponent 
               apiKey={apiKey}
               organizationId={organization.id}
-              internalWarehouse="0aff5b5d-a4e2-419d-99e1-be1019728cbc"
+              internalWarehouse="aec27559-843e-4b08-9671-58e9b0bcf05d"
               tableName='dummy_data'
-              tenancyColumn={orgId}
+              tenancyColumn="org_id"
+              tenancyIdentifier="org_5131c56fa5ff41df97cc1b1c890"
             />
           ) : (
             <p className="text-yellow-600">

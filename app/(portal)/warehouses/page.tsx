@@ -26,7 +26,7 @@ import {
 import { table } from 'console';
 import Image from 'next/image';
 import { PlusCircle, Plug } from 'lucide-react';
-import { ExportWrapper } from '@runportcullis/portcullis-react';
+import { ExportComponent } from '@runportcullis/portcullis-react';
 import { decrypt } from '@/lib/encryption';
 import { encrypt } from '@/lib/encryption';
 import { Code } from '@/components/ui/code';
@@ -35,9 +35,7 @@ interface Warehouse {
   organization: string;
   id: string;
   status: string;
-  tenancy_column: string;  // Name of the column used for tenant filtering
   internal_credentials: string;
-  tenant_id: string;
 }
 
 interface ClickhouseCredentials {
@@ -246,46 +244,16 @@ export default function InternalWarehouseListPage() {
     }
   };
 
-  const fetchColumns = async () => {
-    if (!selectedTable) return;
-    
-    const clickhouseClient = Clickhouse({
-      url: newWarehouse.credentials.host,
-      username: newWarehouse.credentials.username,
-      password: newWarehouse.credentials.password,
-      database: newWarehouse.credentials.database,
-    });
-
-    try {
-      const resultSet = await clickhouseClient.query({
-        query: `DESCRIBE ${selectedTable}`,
-        format: 'JSONEachRow',
-      });
-      const dataset: { name: string }[] = await resultSet.json();
-      const columnNames = dataset.map((row) => row.name);
-      setColumns(columnNames);
-      setIsColumnSelectionStep(true);
-      setIsTableSelectionStep(false);
-    } catch (error) {
-      console.error('Error fetching columns:', error);
-      toast({
-        title: "Error",
-        description: "Failed to fetch table columns",
-        variant: "destructive",
-      });
-    }
-  };
-
   const handleAddWarehouse = async () => {
-    if (!selectedTable || !tenancyColumn) {
+    if (!selectedTable) {
       toast({
         title: "Selection Required",
-        description: "Please select both a table and tenancy column before proceeding.",
+        description: "Please select a table before proceeding.",
         variant: "destructive",
       });
       return;
     }
-  
+
     try {
       const orgId = organization?.id;
       if (!orgId) {
@@ -307,11 +275,8 @@ export default function InternalWarehouseListPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           organization: orgId,
-          internal_type: 'clickhouse',
-          internal_credentials: encryptedCredentials,  // Send encrypted string
+          credentials: encryptedCredentials,  // Send encrypted string
           table_name: selectedTable,
-          tenancy_column: tenancyColumn,
-          tenant_id: tenancyColumn,
         }),
       });
   
@@ -367,7 +332,7 @@ export default function InternalWarehouseListPage() {
                 Enter your Clickhouse database credentials below.
               </DialogDescription>
             </DialogHeader>
-            {!isTableSelectionStep && !isColumnSelectionStep ? (
+            {!isTableSelectionStep ? (
               <div className="grid gap-4 py-4">
                 <div className="grid gap-2">
                   <Label htmlFor="host">Host</Label>
@@ -416,7 +381,7 @@ export default function InternalWarehouseListPage() {
                 </div>
                 <Button onClick={handleTestConnection}>Test Connection</Button>
               </div>
-            ) : isTableSelectionStep ? (
+            ) : (
               <div className="grid gap-4 py-4">
                 <Select onValueChange={setSelectedTable}>
                   <SelectTrigger>
@@ -426,22 +391,6 @@ export default function InternalWarehouseListPage() {
                     {tables.map((table) => (
                       <SelectItem key={table} value={table}>
                         {table}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button onClick={fetchColumns}>Next</Button>
-              </div>
-            ) : (
-              <div className="grid gap-4 py-4">
-                <Select onValueChange={setTenancyColumn}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select tenancy column" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {columns.map((column) => (
-                      <SelectItem key={column} value={column}>
-                        {column}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -513,16 +462,17 @@ export default function InternalWarehouseListPage() {
                               <div>
                                 <h4 className="text-sm font-medium mb-2">2. Add the Export Component</h4>
                                 <Code 
-                                  code={`import { ExportWrapper } from '@runportcullis/portcullis-react';
+                                  code={`import { ExportComponent } from '@runportcullis/react-sdk';
 
 export default function App() {
   return (
-    <ExportWrapper
+    <ExportComponent
       apiKey="YOUR_API_KEY" // Replace with your actual API key
       organizationId="${organization?.id}"
       internalWarehouse="${warehouse.id}"
-      tableName="your-table-name" // Replace with your actual table name
-      tenantId="your-tenant-id" // Replace with your actual tenant ID
+      tableName="${selectedTable}"
+      tenancyColumn="your-tenancy-column" # Optional
+      tenancyIdentifier="your-tenant-id" # Optional
     />
   );
 }`}

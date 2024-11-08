@@ -83,8 +83,8 @@ dependencies:
     specifier: ^0.0.25
     version: 0.0.25(react-dom@18.3.1)(react@18.3.1)
   '@runportcullis/portcullis-react':
-    specifier: 0.1.26
-    version: 0.1.26(@types/react-dom@18.2.7)(@types/react@18.2.21)(postcss@8.4.29)(react-dom@18.3.1)(react@18.3.1)(typescript@5.2.2)
+    specifier: 0.1.31
+    version: 0.1.31(@types/react-dom@18.2.7)(@types/react@18.2.21)(postcss@8.4.29)(react-dom@18.3.1)(react@18.3.1)(typescript@5.2.2)
   '@segment/analytics-next':
     specifier: ^1.76.0
     version: 1.76.0
@@ -4820,8 +4820,8 @@ packages:
     resolution: {integrity: sha512-zt6OdqaDoOnJ1ZYsCYGt9YmWzDXl4vQdKTyJev62gFhRGKdx7mcT54V9KIjg+d2wi9EXsPvAPKe7i7WjfVWB8g==}
     dev: false
 
-  /@runportcullis/portcullis-react@0.1.26(@types/react-dom@18.2.7)(@types/react@18.2.21)(postcss@8.4.29)(react-dom@18.3.1)(react@18.3.1)(typescript@5.2.2):
-    resolution: {integrity: sha512-Kcg2Z8J6zgd3okAuO7UT6jbWN69QXBvPY+p2vYyyyMk9y+pm7r4VRG9zWL4yuddNp57Rfn8hVi5J5Dp6iFMVLw==}
+  /@runportcullis/portcullis-react@0.1.31(@types/react-dom@18.2.7)(@types/react@18.2.21)(postcss@8.4.29)(react-dom@18.3.1)(react@18.3.1)(typescript@5.2.2):
+    resolution: {integrity: sha512-cugZcvo4f8pqJV/H1xLOn8eYIJH3bJBA/eWeNGJG1Dq35Zn6y3qim9kfGaiwBExn5+Y5IDMgUlXXXRNkBdpfDQ==}
     peerDependencies:
       react: '>=16.8.0'
       react-dom: '>=16.8.0'
