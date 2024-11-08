@@ -1,13 +1,13 @@
 export type TypeMappings = Map<string, string>;
 
 export enum WarehouseDataType {
-  Snowflake = "Snowflake",
-  BigQuery = "BigQuery",
-  Redshift = "Redshift",
-  Databricks = "Databricks",
+  Snowflake = "snowflake",
+  BigQuery = "bigQuery",
+  Redshift = "redshift",
+  Databricks = "databricks",
   SQL = "SQL",
-  Clickhouse = "Clickhouse",
-  Kafka = "Kafka"
+  Clickhouse = "clickhouse",
+  Kafka = "kafka"
 }
 
 export interface WarehouseMapping {

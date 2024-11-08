@@ -118,27 +118,60 @@ export const clickhouseToSnowflakeSync = inngest.createFunction(
     return await step.run("sync-data", async () => {
       try {
         // Handle credentials decryption      
-        const internal_credentials = payload.internal_credentials;
-        let decryptedCredentials;
+              const internal_credentials = payload.internal_credentials;
+              let decryptedCredentials;
         
-        if (typeof payload.internal_credentials === 'string') {
-          decryptedCredentials = await decrypt(payload.internal_credentials);
-        } else {
-          decryptedCredentials = {
-            host: await decrypt(payload.internal_credentials.host),
-            username: await decrypt(payload.internal_credentials.username),
-            password: await decrypt(payload.internal_credentials.password),
-            database: await decrypt(payload.internal_credentials.database),
-          };
-        }
+              if (typeof payload.internal_credentials === 'string') {
+                console.log('Raw internal_credentials:', payload.internal_credentials);
+                let decrypted = await decrypt(payload.internal_credentials);
+          
+                // Keep decrypting until we get a valid JSON or hit a limit
+                let attempts = 0;
+                const MAX_DECRYPT_ATTEMPTS = 3;
+                
+                while (attempts < MAX_DECRYPT_ATTEMPTS) {
+                  try {
+                    // Try to parse as JSON
+                    decryptedCredentials = JSON.parse(decrypted);
+                    break;
+                  } catch (e) {
+                    // If parsing fails, try decrypting again
+                    console.log(`Decryption attempt ${attempts + 1}:`, decrypted);
+                    decrypted = await decrypt(decrypted);
+                    attempts++;
+                  }
+                }
 
-        const clickhouse = createClickhouseClient({
-          url: decryptedCredentials.host,
-          username: decryptedCredentials.username,
-          password: decryptedCredentials.password,
-          database: decryptedCredentials.database,
-          request_timeout: 30000,
-        });
+                if (!decryptedCredentials) {
+                  throw new Error(`Failed to decrypt credentials after ${MAX_DECRYPT_ATTEMPTS} attempts`);
+                }
+              } else {
+                decryptedCredentials = {
+                  host: await decrypt(payload.internal_credentials.host),
+                  username: await decrypt(payload.internal_credentials.username),
+                  password: await decrypt(payload.internal_credentials.password),
+                  database: await decrypt(payload.internal_credentials.database),
+                };
+              }
+
+              console.log("Connecting to ClickHouse", { 
+                host: decryptedCredentials.host,
+                username: decryptedCredentials.username,
+                database: decryptedCredentials.database,
+                password: decryptedCredentials.password
+              });
+
+              const clickhouse = createClickhouseClient({
+                url: decryptedCredentials.host,
+                username: decryptedCredentials.username,
+                password: decryptedCredentials.password,
+                database: decryptedCredentials.database,
+                request_timeout: 30000,
+              });
+
+                          // Test the connection before proceeding
+            await clickhouse.ping();
+            console.log("Successfully connected to ClickHouse");
 
                 // Create Snowflake connection
                 const snowflakeConnection = Snowflake.createConnection({

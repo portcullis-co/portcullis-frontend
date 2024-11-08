@@ -57,7 +57,7 @@ export async function GET(request: Request) {
       // Decrypt credentials before sending response
       const decryptedWarehouse = {
         ...data,
-        credentials: data.credentials ? await decrypt(data.credentials) : null
+        credentials: data.internal_credentials ? await decrypt(data.internal_credentials) : null
       };
 
       return NextResponse.json({ warehouse: decryptedWarehouse });
@@ -83,7 +83,7 @@ export async function GET(request: Request) {
       const decryptedWarehouses = await Promise.all(
         warehouses.map(async (warehouse) => ({
           ...warehouse,
-          credentials: warehouse.credentials ? await decrypt(warehouse.credentials) : null
+          credentials: warehouse.internal_credentials ? await decrypt(warehouse.internal_credentials) : null
         }))
       );
 
@@ -108,7 +108,7 @@ export async function POST(request: Request) {
   }
   
   try {
-    const { internal_credentials, table_name, tenancy_column, tenant_id } = await request.json();
+    const { internal_credentials, table_name} = await request.json();
     
     // Encrypt credentials before storing
     const encryptedCredentials = await encrypt(internal_credentials);
@@ -120,8 +120,6 @@ export async function POST(request: Request) {
         organization: orgId, 
         slug,
         table_name,
-        tenancy_column,
-        tenant_id
       })
       .select()
       .single();
