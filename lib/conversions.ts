@@ -3,6 +3,56 @@
  * @param clickhouseType - The ClickHouse data type to convert.
  * @returns The corresponding Snowflake data type.
  */
+
+
+// Utility function to sanitize the table name
+export function sanitizeIdentifier(identifier: string): string {
+    // Only allow alphanumeric characters and underscores to avoid SQL injection.
+    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(identifier)) {
+        throw new Error(`Invalid table name: ${identifier}`);
+    }
+    return identifier;
+}
+
+
+// Generalized query builder function
+export function buildQuery({
+    table,
+    conditions = {},
+    columns = ['*'],
+}: {
+    table: string;
+    conditions?: { [column: string]: any };
+    columns?: string[];
+}): { query: string; params: any[] } {
+    // Sanitize table name and column names
+    const sanitizedTable = sanitizeIdentifier(table);
+    const sanitizedColumns = columns.map(sanitizeIdentifier);
+
+    // Build the SELECT clause
+    const selectClause = `SELECT ${sanitizedColumns.join(', ')} FROM ${sanitizedTable}`;
+
+    // Initialize parameters array for parameterized query
+    const params: any[] = [];
+
+    // Build the WHERE clause if there are conditions
+    let whereClause = '';
+    if (Object.keys(conditions).length > 0) {
+        const conditionsList = Object.entries(conditions).map(([column, value], index) => {
+            const sanitizedColumn = sanitizeIdentifier(column);
+            params.push(value); // Add value to params array
+            return `${sanitizedColumn} = ?`; // Use placeholder for value
+        });
+        whereClause = ` WHERE ${conditionsList.join(' AND ')}`;
+    }
+
+    // Combine the SELECT and WHERE clauses
+    const query = `${selectClause}${whereClause}`;
+
+    return { query, params };
+}
+
+
 export function getSnowflakeDataType(clickhouseType: string): string {
     // Guard against undefined or null input
     if (!clickhouseType) {

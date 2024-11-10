@@ -1,22 +1,66 @@
 import { WarehouseDataType, TypeMappings } from "./clickhouse.d";
 
-// Move all Map implementations here
-export const clickhouseToSnowflake: TypeMappings = new Map([
-    ['Int32', 'INTEGER'],
-    ['Int64', 'INTEGER'],
-    ['Int16', 'SMALLINT'],
-    ['Float32', 'FLOAT'],
-    ['Float64', 'DOUBLE'],
-    ['String', 'VARCHAR'],
-    ['UInt8', 'BOOLEAN'],
-    ['Date', 'DATE'],
-    ['DateTime', 'TIMESTAMP'],
-    ['Decimal', 'DECIMAL'],
+export const clickhouseToSnowflake: Map<string, string> = new Map([
+    // Integer types
+    ['UINT8', 'NUMBER(5, 0)'],
+    ['UINT16', 'NUMBER(5, 0)'],
+    ['UINT32', 'NUMBER(10, 0)'],
+    ['INT8', 'NUMBER(5, 0)'],
+    ['INT16', 'SMALLINT'],
+    ['INT32', 'INTEGER'],
+    ['INT64', 'NUMBER(20, 0)'],
+    ['INT128', 'NUMBER(38, 0)'],
+    ['INT256', 'NUMBER(38, 0)'],
+    ['UINT64', 'NUMBER(20, 0)'],
+    ['UINT128', 'NUMBER(38, 0)'],
+    ['UINT256', 'NUMBER(38, 0)'],
+
+    // FLOATING-POINT TYPES
+    ['FLOAT32', 'FLOAT'],
+    ['FLOAT64', 'DOUBLE'],
+
+    // DECIMAL TYPE
+    ['DECIMAL', 'DECIMAL'], // DECIMAL (PRECISION, SCALE) AS NEEDED, DEFAULT HANDLED ELSEWHERE IF NECESSARY
+
+    // STRING TYPES
+    ['STRING', 'VARCHAR'],
+    ['FIXEDSTRING', 'VARCHAR'],
     ['UUID', 'VARCHAR'],
-    ['JSON', 'OBJECT'],
-    ['Array', 'ARRAY'],
-    ['Binary', 'BINARY'],
-    ['default', 'VARCHAR(MAX)']
+    ['IPV4', 'VARCHAR'], // SNOWFLAKE LACKS DIRECT IP TYPE SUPPORT
+    ['IPV6', 'VARCHAR'],
+
+    // DATE AND TIME TYPES
+    ['DATE', 'DATE'],
+    ['DATE32', 'DATE'],
+    ['DATETIME', 'TIMESTAMP_NTZ'],
+    ['DATETIME64', 'TIMESTAMP_NTZ'],
+
+    // JSON-LIKE AND SEMI-STRUCTURED DATA TYPES
+    ['JSON', 'VARIANT'],
+    ['OBJECT', 'VARIANT'], // DEPRECATED TYPE, BUT MAPPED TO VARIANT FOR SEMI-STRUCTURED DATA
+    ['MAP', 'OBJECT'],
+
+    // ARRAY TYPE
+    ['ARRAY', 'ARRAY'],
+
+    // GEOGRAPHIC AND GEOMETRY TYPES (NO DIRECT SUPPORT IN SNOWFLAKE, USING VARCHAR)
+    ['GEO', 'VARCHAR'],
+    ['POINT', 'VARCHAR'],
+    ['RING', 'VARCHAR'],
+    ['LINESTRING', 'VARCHAR'],
+    ['MULTILINESTRING', 'VARCHAR'],
+    ['POLYGON', 'VARCHAR'],
+
+    // BOOLEAN TYPE (HANDLED IN CLICKHOUSE OFTEN AS UINT8)
+    ['BOOLEAN', 'BOOLEAN'],
+
+    // MISCELLANEOUS
+    ['TUPLE', 'VARCHAR'], // REPRESENTED AS VARCHAR DUE TO LACK OF NATIVE SUPPORT FOR TUPLES
+    ['NOTHING', 'NULL'], // MAPS TO NULL IN SNOWFLAKE
+    ['BINARY', 'BINARY'],
+
+    // DEFAULT FALLBACK TYPE
+    ['DEFAULT', 'VARCHAR']
 ]);
 
 export const clickhouseToBigQuery: TypeMappings = new Map([
@@ -44,7 +88,7 @@ export const clickhouseToRedshift: TypeMappings = new Map([
     ['Float64', 'DOUBLE PRECISION'],
     ['String', 'VARCHAR'],
     ['UInt8', 'BOOLEAN'],
-    ['Date', 'DATE'],
+    ['Date', 'DATE'], 
     ['DateTime', 'TIMESTAMP'],
     ['Decimal', 'DECIMAL'],
     ['UUID', 'VARCHAR'],

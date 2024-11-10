@@ -8,6 +8,7 @@ import { serve } from "inngest/next";
 import { clickhouseToSnowflakeSync } from "@/app/inngest/functions/clickhouseToSnowflakeSync"; // Create this file
 import { inngest } from "@/app/inngest/client";
 import { ExportComponentProps } from '@runportcullis/portcullis-react';
+import { buildQuery } from "@/lib/conversions";
 
 
 const allowedOrigins = [
@@ -83,16 +84,20 @@ export async function POST(request: Request) {
       scheduled_at 
     } = body;
 
+    // Extract `tenancyColumn` and `tenancyIdentifier` from the request body
     const { tenancyColumn, tenancyIdentifier } = body as ExportComponentProps;
     console.log('Request body:', body);
     console.log('Tenancy Column:', tenancyColumn); // Debug log
 
-    let query;
-    if (tenancyColumn && tenancyIdentifier) {
-      query = `SELECT * FROM ${table} WHERE ${tenancyColumn} = '${tenancyIdentifier}'`;
-    } else {
-      query = `SELECT * FROM ${table}`;
-    }
+    // Build the query using `buildQuery` function with sanitized identifiers
+    const { query, params } = buildQuery({
+        table,
+        conditions: tenancyColumn && tenancyIdentifier ? { [tenancyColumn]: tenancyIdentifier } : {},
+    });
+
+    // Log the constructed query for debugging
+    console.log('Constructed Query:', query);
+    console.log('Query Parameters:', params);
 
     // Validate required fields
     if (!internal_warehouse || !destination_type || !destination_name || !table || !credentials || !internal_credentials) {

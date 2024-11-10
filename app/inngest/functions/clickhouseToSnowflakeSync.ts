@@ -6,7 +6,8 @@ import { Analytics } from '@segment/analytics-node';
 import { TypeMappings, WarehouseDataType, ClickhouseCredentials, SnowflakeCredentials } from "@/lib/common/types/clickhouse.d";
 import { clickhouseToSnowflake, typeMatrix } from "@/lib/common/types/clickhouse";
 import { generateSnowflakeCreateTableSQL } from "@/lib/conversions";
-import { preprocess } from "zod";
+import { sanitizeIdentifier } from "@/lib/conversions";
+
 
 // Add type definition
 interface SnowflakeSyncPayload {
@@ -103,21 +104,10 @@ function convertValue(value: any, clickhouseType: string): any {
   }
 }
 
-// Function to convert Clickhouse value to Snowflake-compatible value
-function convertClickhouseValue(value: any, clickhouseType: string, destinationType: WarehouseDataType): any {
-  if (value === null || value === undefined) return null;
-
-  const snowflakeType = getSnowflakeType(clickhouseType);
-  const targetWarehouseType = convertWarehouseType(destinationType);
-  const warehouseType = getWarehouseType(snowflakeType, targetWarehouseType);
-  console.log("Using warehouse type for export:", warehouseType);
-
-  return convertValue(value, warehouseType);
-}
-
 // 1. Using TypeMappings
 function getSnowflakeType(clickhouseType: string): string {
-  return clickhouseToSnowflake.get(clickhouseType) || clickhouseToSnowflake.get('default')!;
+  const processedType = clickhouseType.startsWith('DECIMAL') ? clickhouseType.slice(6) : clickhouseType
+  return clickhouseToSnowflake.get(processedType.toUpperCase()) || clickhouseToSnowflake.get('default')!;
 }
 
 function convertWarehouseType(warehouse: WarehouseDataType): WarehouseDataType {
@@ -138,6 +128,18 @@ function getWarehouseType(sourceType: string, targetWarehouse: WarehouseDataType
     throw new Error(`No type mappings found for warehouse: ${targetWarehouse}`);
   }
   return mappings.get(sourceType) || 'STRING';
+}
+
+// Function to convert Clickhouse value to Snowflake-compatible value
+function convertClickhouseValue(value: any, clickhouseType: string, destinationType: WarehouseDataType): any {
+  if (value === null || value === undefined) return null;
+
+  const snowflakeType = getSnowflakeType(clickhouseType);
+  const targetWarehouseType = convertWarehouseType(destinationType);
+  const warehouseType = getWarehouseType(snowflakeType, targetWarehouseType);
+  console.log("Using warehouse type for export:", warehouseType);
+
+  return convertValue(value, warehouseType);
 }
 
 // Create function with proper typing
@@ -260,21 +262,25 @@ export const clickhouseToSnowflakeSync = inngest.createFunction(
             const clickhouseType = typeof value; // You may need a better way to determine the type
             transformedRow[key] = convertClickhouseValue(value, clickhouseType, targetWarehouseType);
           }
-          const upsertQuery = `
-            MERGE INTO ${payload.table} AS target
-            USING (SELECT :1 AS id, :2 AS column1, :3 AS column2) AS source
+            // Validate and sanitize the table name
+            const tableName = sanitizeIdentifier(payload.table);
+        
+            // Construct the upsert query with a sanitized table name
+            const upsertQuery = `
+            MERGE INTO ${tableName} AS target
+            USING (SELECT ? AS id, ? AS column1, ? AS column2) AS source
             ON target.id = source.id
             WHEN MATCHED THEN
               UPDATE SET target.column1 = source.column1, target.column2 = source.column2
             WHEN NOT MATCHED THEN
-              INSERT (id, column1, column2) VALUES (source.id, source.column1, source.column2);
-          `;
+              INSERT (id, column1, column2) VALUES (?, ?, ?);
+            `; 
 
           // Execute the upsert query
           await new Promise((resolve, reject) => {
             snowflakeConnection.execute({
               sqlText: upsertQuery,
-              binds: [transformedRow.id, transformedRow.column1, transformedRow.column2], // Adjust based on your actual columns
+              binds: [transformedRow.id, transformedRow.column1, transformedRow.column2, transformedRow.id, transformedRow.column1, transformedRow.column2], // Adjust based on your actual columns
               complete: (err, stmt) => {
                 if (err) {
                   console.error("Failed to execute upsert:", err);
