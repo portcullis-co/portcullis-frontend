@@ -6,6 +6,7 @@ import { Analytics } from '@segment/analytics-node';
 import { TypeMappings, WarehouseDataType, ClickhouseCredentials, SnowflakeCredentials } from "@/lib/common/types/clickhouse.d";
 import { clickhouseToSnowflake, typeMatrix } from "@/lib/common/types/clickhouse";
 import { generateSnowflakeCreateTableSQL } from "@/lib/conversions";
+import { preprocess } from "zod";
 
 // Add type definition
 interface SnowflakeSyncPayload {
@@ -17,39 +18,87 @@ interface SnowflakeSyncPayload {
   organization: string;
 }
 
-// Function to convert value based on warehouse type
-function convertValue(value: any, clickhouseType: string): any {
-  const snowflakeType = clickhouseToSnowflake.get(clickhouseType) || 'VARCHAR'; // Default type
 
-  switch (snowflakeType) {
-    case 'VARCHAR':
+function StartsWithDecimal(clickhouseType: string): boolean {
+  return clickhouseType.startsWith("Decimal");
+}
+
+// Function to convert value based on warehouse type
+//https://clickhouse.com/docs/en/sql-reference/data-types/data-types-binary-encoding
+function convertValue(value: any, clickhouseType: string): any {
+  const preProccessed = clickhouseToSnowflake.get(clickhouseType)?.toUpperCase() || 'VARCHAR'; // Default type
+  const processedType = preProccessed.startsWith('DECIMAL') ? preProccessed.slice(6) : preProccessed
+
+  switch (processedType) {
+    case 'STRING':
+    case 'FIXEDSTRING':
+    case 'VARCHAR': //shouldn't trigger
       return String(value);
-    case 'INTEGER':
+
+    case 'UInt8':
+    case 'UInt16':
+    case 'UInt32':
+    case 'Int8':
+    case 'Int16':
+    case 'Int32':       
+    case 'INTEGER': //shouldn't trigger                                                                     
       return Number(value);
+    
+    case 'Int64':
+    case 'Int128':
+    case 'Int256':
+    case 'UInt64':
+    case 'UInt128':
+    case 'UInt256': 
+      return BigInt(value); 
+
+    case 'FLOAT32':
+    case 'FLOAT64':
+    case 'FLOAT': //shouldn't trigger
+    case 'DOUBLE': //shouldn't trigger
+    case 'DECIMAL': 
+      return parseFloat(value);
+
     case 'BOOLEAN':
       return Boolean(value);
-    case 'FLOAT':
-    case 'DOUBLE':
-      return parseFloat(value);
-    case 'SMALLINT':
-      return Number(value) & 0xFFFF; // Ensure it's within SMALLINT range
-    case 'BIGINT':
-      return BigInt(value);
+
     case 'DATE':
+    case 'DATE32':
+    case 'DATETIME':
+    case 'DATETIME64':
       return new Date(value); // Assuming value is in a format that can be parsed
-    case 'TIMESTAMP':
-      return new Date(value); // Assuming value is in a format that can be parsed
-    case 'DECIMAL':
-      return parseFloat(value); // Handle decimal conversion
+      
     case 'UUID':
       return String(value); // UUIDs are typically strings
-    case 'OBJECT':
-      return JSON.parse(value); // Assuming value is a JSON string
+
+    case 'JSON':  
+    case 'MAP':
+    case 'JSON':
+    case 'OBJECT': //TODO: This is Deprecated
+      return JSON.parse(value); 
+
     case 'ARRAY':
       return Array.isArray(value) ? value : JSON.parse(value); // Handle array conversion
-    case 'BINARY':
-      return Buffer.from(value, 'base64'); // Assuming value is a base64 encoded string
-    default:
+
+    case 'TUPLE': 
+      return String(value);
+
+    case 'IPV6':
+    case 'IPV4':
+      return String(value);
+
+    case 'GEO':
+    case 'POINT':
+    case 'RING':
+    case 'LINESTRING':
+    case 'MULTILINESTRING':
+    case 'POLYGON':
+      return String(value) //won't create 
+
+    case 'NOTHING':
+      return null; //I think this is right
+
+    default: //TODO: Expression, Set, Nothing, Nested, Aggregation function types and Interval
       return value; // Fallback to original value
   }
 }

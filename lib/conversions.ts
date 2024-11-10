@@ -6,15 +6,15 @@
 export function getSnowflakeDataType(clickhouseType: string): string {
     // Guard against undefined or null input
     if (!clickhouseType) {
-        console.warn('Received undefined or null ClickHouse type, defaulting to VARCHAR');
-        return 'VARCHAR';
+        console.error('Received undefined or null ClickHouse type.');
+        return 'thisisanerrormessage_001';
     }
 
     // Ensure we're working with a string
-    const type = String(clickhouseType).trim();
+    const type = String(clickhouseType).trim().toUpperCase();
 
     // Handle nullable types
-    if (type.startsWith('Nullable(')) {
+    if (type.startsWith('NULLABLE(')) {
         try {
             const innerType = type.slice(9, -1);
             return getSnowflakeDataType(innerType);
@@ -25,7 +25,7 @@ export function getSnowflakeDataType(clickhouseType: string): string {
     }
 
     // Handle LowCardinality types
-    if (type.startsWith('LowCardinality(')) {
+    if (type.startsWith('LOWCARDINALITY(')) {
         try {
             const innerType = type.slice(15, -1);
             return getSnowflakeDataType(innerType);
@@ -36,79 +36,86 @@ export function getSnowflakeDataType(clickhouseType: string): string {
     }
 
     // Handle Enum types
-    if (type.startsWith('Enum8(') || type.startsWith('Enum16(') || type === 'Enum8' || type === 'Enum16') {
+    if (type.startsWith('ENUM8(') || type.startsWith('ENUM16(') || type === 'ENUM8' || type === 'ENUM16') {
         return 'VARCHAR';
     }
 
     // Handle Decimal types with precision and scale
-    if (type.startsWith('Decimal')) {
+    if (type.startsWith('DECIMAL')) {
         const match = type.match(/Decimal\((\d+),\s*(\d+)\)/);
         if (match) {
             const [, precision, scale] = match;
-            return `NUMBER(${precision},${scale})`;
+            return `NUMBER(${precision},${scale})`; //technically they are the same, but NUMBER is more common in Docs
         }
         return 'NUMBER(38,6)'; // Default if no precision/scale specified
     }
 
     // Main type conversion switch
     switch (type) {
-        case 'UInt8':
-        case 'UInt16':
-        case 'Int8':
-        case 'Int16':
+        case 'UINT8':
+        case 'UINT16':
+        case 'INT8':
+        case 'INT16':
             return 'NUMBER(5,0)';
             
-        case 'UInt32':
-        case 'Int32':
+        case 'UINT32':
+        case 'INT32':
             return 'NUMBER(10,0)';
             
-        case 'UInt64':
-        case 'Int64':
+        case 'UINT64':
+        case 'INT64':
             return 'NUMBER(20,0)';
 
-        case 'Float32':
+        case 'FLOAT32':
             return 'FLOAT';
             
-        case 'Float64':
+        case 'FLOAT64':
             return 'DOUBLE';
 
-        case 'Decimal':
+        case 'DECIMAL':
             return 'NUMBER(38,6)';
 
-        case 'String':
-        case 'FixedString':
+        case 'STRING':
+        case 'FIXEDSTRING':
             return 'VARCHAR';
 
         case 'Date':
-        case 'Date32':
+        case 'DATE32':
             return 'DATE';
 
-        case 'DateTime':
-        case 'DateTime64':
-            return 'TIMESTAMP_NTZ';
+        case 'DATETIME':
+        case 'DATETIME64':
+            return 'TIMESTAMP';
 
-        case 'Bool':
+        case 'BOOL':
             return 'BOOLEAN';
 
         case 'UUID':
-            return 'VARCHAR(36)';
+            return 'VARCHAR';
 
-        case 'IPv4':
+        case 'IPV4':
             return 'VARCHAR(15)';
             
-        case 'IPv6':
+        case 'IPV6':
             return 'VARCHAR(45)';
 
-        case 'Array':
+        case 'ARRAY':
             return 'ARRAY';
 
-        case 'Tuple':
-        case 'Map':
-        case 'Variant':
-        case 'JSON':
+        case 'TUPLE':
+        case 'MAP':
+        case 'VARIANT':
             return 'VARIANT';
+        
+        case 'JSON':
+            return 'JSON'
 
-        case 'Geo':
+        case 'GEO':
+        case 'POINT':
+        case 'RING':
+        case 'LINESTRING':
+        case 'MULTILINESTRING':
+        case 'POLYGON':
             return 'GEOGRAPHY';
 
         default:
@@ -124,6 +131,13 @@ export function getSnowflakeDataType(clickhouseType: string): string {
  * @returns The converted value.
  */
 export function convertClickhouseToSnowflake(clickhouseType: string, value: any): any {
+
+    // Guard against undefined or null type
+    if (!clickhouseType) {
+        console.error('Received undefined or null ClickHouse type, this should technically never run');
+        return null;
+    }
+
     // Handle null values early
     console.log(`Converting: type=${clickhouseType}, value=${value}`);
     if (value === null || value === undefined) {
@@ -151,12 +165,6 @@ export function convertClickhouseToSnowflake(clickhouseType: string, value: any)
 
     if (clickhouseType.startsWith('Enum8(') || clickhouseType.startsWith('Enum16(') || clickhouseType === 'Enum8' || clickhouseType === 'Enum16') {
         return value === '' ? null : String(value);
-    }
-
-    // Guard against undefined or null type
-    if (!clickhouseType) {
-        console.warn('Received undefined or null ClickHouse type, treating value as string');
-        return String(value);
     }
 
     // Ensure we're working with a string type
