@@ -138,12 +138,13 @@ function getFinalSnowflakeType(clickhouseType: string, destinationType: Warehous
   // Step 2: Convert to specific warehouse type if needed
   let snowflakeType: string;
 
-  // Handle Decimal types specially
-  if (baseType.startsWith('DECIMAL')) {
-    snowflakeType = 'DECIMAL'; 
-  } else {
-    snowflakeType = clickhouseToSnowflake.get(baseType) || 'VARCHAR';
-  }
+  // TODO Handle Decimal types specially
+  //do some logic here grabbing the type const and porting across scale and precision
+  /*
+  https://clickhouse.com/docs/en/sql-reference/data-types/decimal
+  https://docs.snowflake.com/en/sql-reference/data-types-numeric
+  */
+  snowflakeType = baseType || 'VARCHAR';
 
   const warehouseMappings = typeMatrix.get(destinationType);
   if (!warehouseMappings) {
