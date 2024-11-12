@@ -26,32 +26,29 @@ interface QueryParams {
 export function buildClickHouseQuery({
     table,
     conditions = {},
-    columns = ['*'],
-}: QueryParams): { query: string; params: Record<string, any> } {
+    columns = ['*']
+}: {
+    table: string;
+    conditions?: Record<string, any>;
+    columns?: string[];
+}) {
     // Sanitize table name and column names
-    const sanitizedTable = sanitizeIdentifier(table);
-    const sanitizedColumns = columns.map(col => (col === '*' ? col : sanitizeIdentifier(col)));
-    
-    // Build the SELECT clause
-    const selectClause = `SELECT ${sanitizedColumns.join(', ')} FROM ${sanitizedTable}`;
+    const sanitizedTable = `"${table}"`;
+    const sanitizedColumns = columns.map(col => col === '*' ? '*' : `"${col}"`).join(', ');
 
-    // Initialize parameters object for named parameters
+    // Build the base query
+    let query = `SELECT ${sanitizedColumns} FROM ${sanitizedTable}`;
     const params: Record<string, any> = {};
 
-    // Build the WHERE clause if there are conditions
-    let whereClause = '';
+    // Add WHERE clause if conditions exist
     if (Object.keys(conditions).length > 0) {
-        const conditionsList = Object.entries(conditions).map(([column, value], index) => {
-            const sanitizedColumn = sanitizeIdentifier(column);
-            const paramName = `p${index}`; // Create unique parameter name
-            params[paramName] = value; // Add value to params object
-            return `${sanitizedColumn} = {${paramName}:${getClickHouseParamType(value)}}`; // Use ClickHouse parameter syntax
+        const whereConditions = Object.entries(conditions).map(([key, value], index) => {
+            const paramName = `p${index}`;
+            params[paramName] = value;
+            return `"${key}" = {${paramName}:String}`; // Use consistent String type for parameters
         });
-        whereClause = ` WHERE ${conditionsList.join(' AND ')}`;
+        query += ` WHERE ${whereConditions.join(' AND ')}`;
     }
-
-    // Combine the SELECT and WHERE clauses
-    const query = `${selectClause}${whereClause}`;
 
     return { query, params };
 }

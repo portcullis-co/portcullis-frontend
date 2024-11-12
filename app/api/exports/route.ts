@@ -87,8 +87,8 @@ export async function POST(request: Request) {
 
     // Extract `tenancyColumn` and `tenancyIdentifier` from the request body
     console.log('Request body:', body);
-    console.log('Tenancy Column:', body.tenancy_column); // Debug log
-    console.log('Tenancy Identifier:', body.tenancy_id); // Debug log
+    console.log('Tenancy Column:', tenancy_column); // Debug log
+    console.log('Tenancy Identifier:', tenancy_id); // Debug log
 
     // Build the query using `buildQuery` function with sanitized identifiers
     const { query, params } = buildClickHouseQuery({
@@ -160,6 +160,8 @@ export async function POST(request: Request) {
           internal_credentials: decryptedCredentials,
           destination_credentials: credentials,
           organization: body.organization,
+          tenancy_column: body.tenancy_column,
+          tenancy_id: body.tenancy_id,
           query: query,
           destination_type: destination_type as WarehouseDataType,
           table: table,

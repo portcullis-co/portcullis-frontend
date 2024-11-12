@@ -28,6 +28,10 @@ interface SnowflakeSyncPayload {
   query: string;
   table: string;
   organization: string;
+  internal_warehouse: string;
+  tenancy_column?: string; // This is the column that contains the tenancy identifier
+  tenancy_id?: string; // This is the identifier for the tenancy
+  scheduled_at?: string;
 }
 
 
@@ -38,6 +42,7 @@ function StartsWithDecimal(clickhouseType: string): boolean {
 // Function to convert value based on warehouse type
 //https://clickhouse.com/docs/en/sql-reference/data-types/data-types-binary-encoding
 function convertValue(value: any, clickhouseType: string): any {
+  console.log('Fuck Malvious:', value);
   if (!clickhouseType) {
     console.error('Received undefined or null ClickHouse type.');
     return 'thisisanerrormessage_001';
@@ -142,6 +147,7 @@ function getFinalSnowflakeType(clickhouseType: string, destinationType: Warehous
   https://clickhouse.com/docs/en/sql-reference/data-types/decimal
   https://docs.snowflake.com/en/sql-reference/data-types-numeric
   */
+  console.log('baseType', baseType);
   return baseType || 'VARCHAR';
 }
 
@@ -322,7 +328,16 @@ export const clickhouseToSnowflakeSync = inngest.createFunction(
           clickhouse_settings: {
               wait_end_of_query: 1,
           },
+          query_params: {
+            p0: payload.tenancy_id // This should match the tenancy_id parameter
+          }
       });  
+
+      console.log('Executing ClickHouse query:', {
+        query: payload.query,
+        params: { p0: payload.tenancy_id }, // This should match the tenancy_id parameter
+        format: 'JSONEachRow'
+      });
       
       // Process the stream in batches
       const batchSize = 1000;
@@ -330,24 +345,43 @@ export const clickhouseToSnowflakeSync = inngest.createFunction(
       const stream = resultStream.stream() as AsyncIterable<any>;
       
       for await (const row of stream) {
-          const transformedRow: Record<string, any> = {};
-          
-          // Process each row and convert data types using actual ClickHouse types
-          for (const [key, value] of Object.entries(row)) {
-              const clickhouseType = columnTypes.get(key) || 'String';  // Default to String if type is missing
-              transformedRow[key] = convertClickhouseValue(value, clickhouseType, payload.destination_type);
-          }                     
-          batch.push(transformedRow);
-          
-          if (batch.length >= batchSize) {
-              await processBatch(batch, snowflakeTableName, snowflakeConnection);
-              batch = [];
-          }
-      }
-      
-      // Process remaining records
-      if (batch.length > 0) {
-          await processBatch(batch, snowflakeTableName, snowflakeConnection);
+        const transformedRow: Record<string, any> = {};
+    
+        // Process each row and convert data types using actual ClickHouse types
+        for (const [key, value] of Object.entries(row)) {
+            const clickhouseType = columnTypes.get(key) || 'String'; // Default to String if type is missing
+    
+            // Check if value is a JSON string and parse it if needed
+                try {
+                    
+                    interface ClickhouseRow {
+                      text: string;
+                      json: Function;
+                  }
+                  const jsonStr = typeof value === 'object' && value !== null && 'text' in value 
+                  ? (value as ClickhouseRow).text 
+                  : JSON.stringify(value);
+                  
+                const parsedJson = JSON.parse(jsonStr);
+    
+                    // Process each key-value pair in the parsed JSON
+                    for (const [jsonKey, jsonValue] of Object.entries(parsedJson)) {
+                        const jsonClickhouseType = columnTypes.get(jsonKey) || 'String'; // Use type for each JSON key
+                        transformedRow[jsonKey] = convertClickhouseValue(jsonValue, jsonClickhouseType, payload.destination_type);
+                    }
+                } catch (error) {
+                    console.error("Failed to parse JSON:", error);
+                    // Fallback: Convert the raw JSON text if parsing fails
+                    transformedRow[key] = convertClickhouseValue(value, clickhouseType, payload.destination_type);
+                }
+        }
+    
+        batch.push(transformedRow);
+    
+        if (batch.length >= batchSize) {
+            await processBatch(batch, snowflakeTableName, snowflakeConnection);
+            batch = [];
+        }
       }
 
         // Clean up connections
@@ -393,24 +427,35 @@ export const clickhouseToSnowflakeSync = inngest.createFunction(
   }
 );
 
+// Helper function to format values for Snowflake SQL
+function formatValue(value: any): string {
+  if (value === null || value === undefined) return 'NULL';
+  if (typeof value === 'string') return `'${value.replace(/'/g, "''")}'`; // Escape single quotes
+  if (typeof value === 'number' || typeof value === 'boolean') return value.toString();
+  if (value instanceof Date) return `'${value.toISOString()}'`; // Format dates in ISO format
+  return `'${value}'`; // Default to treating value as a string
+}
+
 async function processBatch(batch: any[], tableName: string, snowflakeConnection: any): Promise<void> {
   if (batch.length === 0) return;
   
-  // Get column names from the first row
+  // Get column names from the first row and sanitize
   const columns = Object.keys(batch[0]);
-  const sanitizedTableName = sanitizeIdentifier(tableName);
+  const sanitizedTableName = sanitizeIdentifier(tableName, true);
   
-  // Create a bulk insert statement
+  // Construct the bulk insert query
   const columnList = columns.join(', ');
   const valuesList = batch.map(row => 
-    `(${columns.map(col => JSON.stringify(row[col])).join(', ')})`
-  ).join(', ');
+    `(${columns.map(col => formatValue(row[col])).join(', ')})`
+  ).join(',\n');
   
   const insertQuery = `
     INSERT INTO ${sanitizedTableName} (${columnList})
-    VALUES ${valuesList}
+    VALUES ${valuesList};
   `;
 
+  console.log('Insert Query:', insertQuery);
+  // Execute the query
   await new Promise((resolve, reject) => {
     snowflakeConnection.execute({
       sqlText: insertQuery,
