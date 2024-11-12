@@ -95,24 +95,7 @@ export const clickhouseToRedshiftSync = inngest.createFunction(
             rowCount: transformedRows.length 
           });
         }
-
-        let analytics: Analytics | null = null;
-        if (process.env.SEGMENT_WRITE_KEY) {
-          analytics = new Analytics({ writeKey: process.env.SEGMENT_WRITE_KEY });
-        } else {
-          console.warn('SEGMENT_WRITE_KEY not found in environment variables');
-        }
-
-        analytics?.track({
-          userId: payload.organization,
-          event: "clickhouse-redshift-sync",
-          properties: {
-            table: payload.table,
-            revenue: 250,
-            organization: payload.organization,
-            destination: "Redshift",
-          }
-        });
+        
       } catch (error) {
         logger.error("Error during data sync", { error });
         throw error;

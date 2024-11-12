@@ -44,7 +44,7 @@ export default function SDKTestPage() {
             <ExportComponent 
               apiKey={apiKey}
               organizationId={organization.id}
-              internalWarehouse="aec27559-843e-4b08-9671-58e9b0bcf05d"
+              internalWarehouse="7ffa2831-5dec-4de2-ad86-9735ea5e4dbf"
               tableName='dummy_data'
               tenancyColumn="org_id"
               tenancyIdentifier="org_5131c56fa5ff41df97cc1b1c890"

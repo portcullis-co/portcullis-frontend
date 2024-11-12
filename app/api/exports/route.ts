@@ -8,7 +8,7 @@ import { serve } from "inngest/next";
 import { clickhouseToSnowflakeSync } from "@/app/inngest/functions/clickhouseToSnowflakeSync"; // Create this file
 import { inngest } from "@/app/inngest/client";
 import { ExportComponentProps } from '@runportcullis/portcullis-react';
-import { buildQuery } from "@/lib/conversions";
+import { buildClickHouseQuery } from "@/lib/queryBuilder";
 
 
 const allowedOrigins = [
@@ -44,15 +44,15 @@ export async function OPTIONS(request: Request) {
 export async function POST(request: Request) {
   const origin = request.headers.get('origin');
   const headers = corsHeaders(origin);
-  
+
   try {
     // Log all headers for debugging
     console.log('Request headers:', Object.fromEntries(request.headers.entries()));
-    
+
     const supabase = createClient();
     const apiKey = request.headers.get('x-api-key');
     console.log('Received API Key:', apiKey); // Be careful not to log actual keys in production
-    
+
     const body = await request.json();
 
     // Validate API key if present
@@ -73,26 +73,28 @@ export async function POST(request: Request) {
       body.organization = orgId;
     }
 
-    const { 
+    const {
       internal_warehouse,
       internal_credentials,
       destination_type,
-      tenancy_column,
       destination_name,
+      tenancy_column,
+      tenancy_id,
       table,
       credentials,
-      scheduled_at 
+      scheduled_at
     } = body;
 
     // Extract `tenancyColumn` and `tenancyIdentifier` from the request body
-    const { tenancyColumn, tenancyIdentifier } = body as ExportComponentProps;
     console.log('Request body:', body);
-    console.log('Tenancy Column:', tenancyColumn); // Debug log
+    console.log('Tenancy Column:', body.tenancy_column); // Debug log
+    console.log('Tenancy Identifier:', body.tenancy_id); // Debug log
 
     // Build the query using `buildQuery` function with sanitized identifiers
-    const { query, params } = buildQuery({
-        table,
-        conditions: tenancyColumn && tenancyIdentifier ? { [tenancyColumn]: tenancyIdentifier } : {},
+    const { query, params } = buildClickHouseQuery({
+        table: table,
+        conditions: body.tenancy_column && body.tenancy_id ? { [body.tenancy_column]: body.tenancy_id } : {},
+        columns: ['*'],
     });
 
     // Log the constructed query for debugging
@@ -101,8 +103,8 @@ export async function POST(request: Request) {
 
     // Validate required fields
     if (!internal_warehouse || !destination_type || !destination_name || !table || !credentials || !internal_credentials) {
-      return NextResponse.json({ 
-        error: 'Missing required fields' 
+      return NextResponse.json({
+        error: 'Missing required fields'
       }, { status: 400 });
     }
 
@@ -135,16 +137,27 @@ export async function POST(request: Request) {
           .select('internal_credentials, id')
           .eq('id', internal_warehouse)
           .single();
-
+          
         if (warehouseError || !warehouseData) {
           throw new Error(`Failed to fetch warehouse credentials: ${warehouseError?.message || 'No data found'}`);
         }
 
+        // Log the raw internal_credentials for debugging
+        console.log('Raw internal_credentials:', warehouseData.internal_credentials);
+
         // Decrypt the internal warehouse credentials
+        let decryptedCredentials;
+        try {
+          decryptedCredentials = await decrypt(warehouseData.internal_credentials);
+          console.log('Decrypted credentials:', decryptedCredentials);
+        } catch (decryptError) {
+          console.error('Decryption error:', decryptError);
+          throw new Error('Failed to decrypt credentials');
+        }
 
         const payload = {
           internal_warehouse: internal_warehouse,
-          internal_credentials: warehouseData.internal_credentials,
+          internal_credentials: decryptedCredentials,
           destination_credentials: credentials,
           organization: body.organization,
           query: query,
@@ -158,13 +171,13 @@ export async function POST(request: Request) {
           if (!credentials.account || !credentials.username || !credentials.password) {
             throw new Error('Invalid Snowflake credentials');
           }
-          
+
           // Clean up account URL and create new credentials object
           const cleanedCredentials = {
             ...credentials,
             account: credentials.account.replace(/\.snowflakecomputing\.com$/, '')
           };
-          
+
           payload.destination_credentials = cleanedCredentials;
         }
 
@@ -195,7 +208,7 @@ export async function POST(request: Request) {
         console.log("Successfully scheduled export task");
       } catch (error) {
         console.error('Trigger event error:', error);
-        return NextResponse.json({ 
+        return NextResponse.json({
           error: 'Failed to schedule export task',
           details: error instanceof Error ? error.message : 'Unknown error'
         }, { status: 500, headers });
@@ -208,14 +221,15 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error('POST endpoint error:', error);
-    return NextResponse.json({ 
+    return NextResponse.json({
       error: error instanceof Error ? error.message : 'An unexpected error occurred'
-    }, { 
+    }, {
       status: 500,
       headers,
     });
   }
 }
+
 
 export async function GET(request: Request) {
   const origin = request.headers.get('origin');

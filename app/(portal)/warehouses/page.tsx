@@ -259,7 +259,7 @@ export default function InternalWarehouseListPage() {
       if (!orgId) {
         throw new Error('Organization ID is not available');
       }
-  
+
       // Encrypt the credentials before sending
       const credentialsString = JSON.stringify({
         host: newWarehouse.credentials.host,
@@ -268,14 +268,12 @@ export default function InternalWarehouseListPage() {
         password: newWarehouse.credentials.password,
       });
       
-      const encryptedCredentials = await encrypt(credentialsString); // You'll need to import the encrypt function
-
       const response = await fetch('/api/warehouses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           organization: orgId,
-          credentials: encryptedCredentials,  // Send encrypted string
+          internal_credentials: credentialsString,  // Send encrypted string
           table_name: selectedTable,
         }),
       });

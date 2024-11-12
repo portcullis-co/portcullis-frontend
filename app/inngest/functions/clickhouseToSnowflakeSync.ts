@@ -3,11 +3,22 @@ import { decrypt } from "@/lib/encryption";
 import { createClient as createClickhouseClient } from '@clickhouse/client';
 import Snowflake from 'snowflake-sdk';
 import { Analytics } from '@segment/analytics-node';
+import { Connection } from "snowflake-sdk";
 import { TypeMappings, WarehouseDataType, ClickhouseCredentials, SnowflakeCredentials } from "@/lib/common/types/clickhouse.d";
 import { clickhouseToSnowflake, typeMatrix } from "@/lib/common/types/clickhouse";
-import { generateSnowflakeCreateTableSQL } from "@/lib/conversions";
-import { sanitizeIdentifier } from "@/lib/conversions";
+import { json } from "stream/consumers";
+import { error } from "console";
 
+// Utility function to sanitize the table name
+export function sanitizeIdentifier(identifier: string, toUpperCase: boolean = false): string {
+  // Remove any invalid characters and spaces
+  const sanitized = identifier
+      .replace(/[^\w\d_]/g, '_')  // Replace invalid chars with underscore
+      .replace(/^[\d]/, '_$&');   // Prefix with underscore if starts with number
+  
+  // Only convert to uppercase if explicitly requested (for Snowflake)
+  return toUpperCase ? sanitized.toUpperCase() : sanitized;
+}
 
 // Add type definition
 interface SnowflakeSyncPayload {
@@ -27,13 +38,22 @@ function StartsWithDecimal(clickhouseType: string): boolean {
 // Function to convert value based on warehouse type
 //https://clickhouse.com/docs/en/sql-reference/data-types/data-types-binary-encoding
 function convertValue(value: any, clickhouseType: string): any {
-  const preProccessed = clickhouseToSnowflake.get(clickhouseType)?.toUpperCase() || 'VARCHAR'; // Default type
-  const processedType = preProccessed.startsWith('DECIMAL') ? preProccessed.slice(6) : preProccessed
+  if (!clickhouseType) {
+    console.error('Received undefined or null ClickHouse type.');
+    return 'thisisanerrormessage_001';
+}
+  if (!clickhouseType) {
+    console.warn(`Invalid ClickHouse type: ${clickhouseType}. Returning value as is.`);
+    return value;  // Return the value as is if type is missing or invalid
+  }
+
+  const preProcessed = clickhouseToSnowflake.get(clickhouseType)?.toUpperCase() || 'VARCHAR'; // Default to 'VARCHAR' if type is invalid
+  const processedType = preProcessed.startsWith('DECIMAL') ? preProcessed.slice(6) : preProcessed;
 
   switch (processedType) {
     case 'STRING':
     case 'FIXEDSTRING':
-    case 'VARCHAR': //shouldn't trigger
+    case 'VARCHAR': 
       return String(value);
 
     case 'UInt8':
@@ -41,22 +61,22 @@ function convertValue(value: any, clickhouseType: string): any {
     case 'UInt32':
     case 'Int8':
     case 'Int16':
-    case 'Int32':       
-    case 'INTEGER': //shouldn't trigger                                                                     
+    case 'Int32':
+    case 'INTEGER':  
       return Number(value);
-    
+
     case 'Int64':
     case 'Int128':
     case 'Int256':
     case 'UInt64':
     case 'UInt128':
     case 'UInt256': 
-      return BigInt(value); 
+      return BigInt(value);
 
     case 'FLOAT32':
     case 'FLOAT64':
-    case 'FLOAT': //shouldn't trigger
-    case 'DOUBLE': //shouldn't trigger
+    case 'FLOAT':
+    case 'DOUBLE': 
     case 'DECIMAL': 
       return parseFloat(value);
 
@@ -67,16 +87,15 @@ function convertValue(value: any, clickhouseType: string): any {
     case 'DATE32':
     case 'DATETIME':
     case 'DATETIME64':
-      return new Date(value); // Assuming value is in a format that can be parsed
-      
+      return new Date(value); // Assuming value is in a valid format
+
     case 'UUID':
       return String(value); // UUIDs are typically strings
 
     case 'JSON':  
     case 'MAP':
-    case 'JSON':
-    case 'OBJECT': //TODO: This is Deprecated
-      return JSON.parse(value); 
+    case 'OBJECT': // Deprecated
+      return JSON.parse(value);
 
     case 'ARRAY':
       return Array.isArray(value) ? value : JSON.parse(value); // Handle array conversion
@@ -94,19 +113,21 @@ function convertValue(value: any, clickhouseType: string): any {
     case 'LINESTRING':
     case 'MULTILINESTRING':
     case 'POLYGON':
-      return String(value) //won't create 
+      return String(value);
 
     case 'NOTHING':
-      return null; //I think this is right
+      return null;
 
-    default: //TODO: Expression, Set, Nothing, Nested, Aggregation function types and Interval
-      return value; // Fallback to original value
+    default:
+      return value;  // Fallback to the original value for unsupported types
   }
 }
 
+
 // 1. Using TypeMappings
-function getSnowflakeType(clickhouseType: string): string {
-  const processedType = clickhouseType.startsWith('DECIMAL') ? clickhouseType.slice(6) : clickhouseType
+function getSnowflakeDataType(clickhouseType: string): string {
+  const type = String(clickhouseType).trim().toUpperCase();
+  const processedType = type.startsWith('DECIMAL') ? type.slice(6) : type
   return clickhouseToSnowflake.get(processedType.toUpperCase()) || clickhouseToSnowflake.get('default')!;
 }
 
@@ -130,16 +151,68 @@ function getWarehouseType(sourceType: string, targetWarehouse: WarehouseDataType
   return mappings.get(sourceType) || 'STRING';
 }
 
+function getFinalSnowflakeType(clickhouseType: string, destinationType: WarehouseDataType): string {
+  if (!clickhouseType) {
+    console.warn('ClickHouse type is undefined or null, defaulting to VARCHAR');
+    return 'VARCHAR';  // Default fallback instead of throwing error
+  }
+
+  // Step 1: Get base Snowflake type
+  const baseType = getSnowflakeDataType(clickhouseType);
+
+  // Step 2: Convert to specific warehouse type if needed
+  let snowflakeType: string;
+
+  // Handle Decimal types specially
+  if (baseType.startsWith('DECIMAL')) {
+    snowflakeType = 'DECIMAL'; 
+  } else {
+    snowflakeType = clickhouseToSnowflake.get(baseType) || 'VARCHAR';
+  }
+
+  const warehouseMappings = typeMatrix.get(destinationType);
+  if (!warehouseMappings) {
+    console.warn(`No type mappings found for warehouse ${destinationType}, using default Snowflake type`);
+    return snowflakeType;  // Return the Snowflake type if no specific warehouse mapping
+  }
+
+  return warehouseMappings.get(snowflakeType) || 'VARCHAR';
+}
+
+
+function generateSnowflakeCreateTableSQL(
+  tableName: string,
+  columns: Array<{ name: string, type: string }>,
+  destinationType: WarehouseDataType
+): string {
+  // Sanitize table name for Snowflake (uppercase)
+  const sanitizedTableName = sanitizeIdentifier(tableName, true);
+  
+  // Build column definitions with proper quoting - no newlines
+  const columnDefinitions = columns
+    .map(column => {
+      const sanitizedName = sanitizeIdentifier(column.name, false);
+      const snowflakeType = getFinalSnowflakeType(column.type, destinationType);
+      return `"${sanitizedName}" ${snowflakeType}`;
+    })
+    .join(', ');
+
+  // Create single-line SQL statement
+  return `CREATE TABLE IF NOT EXISTS "${sanitizedTableName}" (${columnDefinitions})`;
+}
+
 // Function to convert Clickhouse value to Snowflake-compatible value
 function convertClickhouseValue(value: any, clickhouseType: string, destinationType: WarehouseDataType): any {
   if (value === null || value === undefined) return null;
 
-  const snowflakeType = getSnowflakeType(clickhouseType);
-  const targetWarehouseType = convertWarehouseType(destinationType);
-  const warehouseType = getWarehouseType(snowflakeType, targetWarehouseType);
-  console.log("Using warehouse type for export:", warehouseType);
-
-  return convertValue(value, warehouseType);
+  const snowflakeType = getFinalSnowflakeType(clickhouseType, destinationType);
+  if (!clickhouseType) {
+    console.log('No Clickhouse type provided');
+    throw new Error('No Clickhouse type provided');
+  }
+  else {
+    return convertValue(value, snowflakeType);
+  }
 }
 
 // Create function with proper typing
@@ -153,152 +226,237 @@ export const clickhouseToSnowflakeSync = inngest.createFunction(
   },
   async ({ event, step }) => {
     const payload = event.data as SnowflakeSyncPayload;
-
-    // Convert warehouse type
-    const targetWarehouseType = convertWarehouseType(payload.destination_type);
-
-    // Get Snowflake type for the Clickhouse type
-    const snowflakeType = getSnowflakeType(payload.query); // Assuming payload.query contains the Clickhouse type
-
-    // Get warehouse type mappings
-    const warehouseType = getWarehouseType(snowflakeType, targetWarehouseType);
-
-    // Use the warehouseType in your data export logic
-    console.log("Using warehouse type for export:", warehouseType);
-
+    let clickhouse: any = null;
+    let snowflakeConnection: any = null;
+    
     return await step.run("sync-data", async () => {
       try {
-        // Handle credentials decryption      
-              const internal_credentials = payload.internal_credentials;
-              let decryptedCredentials;
+        // Parse credentials
+        let internal_credentials: ClickhouseCredentials;
+        if (typeof payload.internal_credentials === 'string') {
+          internal_credentials = JSON.parse(payload.internal_credentials) as ClickhouseCredentials;
+        } else {
+          throw new Error('Invalid internal_credentials format');
+        }
+
+        // Connect to ClickHouse
+        clickhouse = createClickhouseClient({
+          url: internal_credentials.host,
+          username: internal_credentials.username,
+          password: internal_credentials.password,
+          database: internal_credentials.database,
+        });
+
+        // Test ClickHouse connection
+        await clickhouse.ping();
+        console.log("Successfully connected to ClickHouse");
+
+        // Extract table name from the query
+        const tableMatch = payload.query.match(/FROM\s+([^\s;]+)/i);
+        if (!tableMatch) {
+          throw new Error('Could not extract table name from query');
+        }
+
+        // Keep original case for ClickHouse operations
+        const originalTableName = tableMatch[1].replace(/[`"]/g, '');
+        const clickhouseTableName = sanitizeIdentifier(originalTableName, false);
+        // Use uppercase for Snowflake operations
+        const snowflakeTableName = sanitizeIdentifier(originalTableName, true);
+
+
+        // Get table structure
+        const describeResult = await clickhouse.query({
+          query: `DESCRIBE TABLE "${clickhouseTableName}"`,
+          format: 'JSONEachRow'
+      });
         
-              if (typeof payload.internal_credentials === 'string') {
-                console.log('Raw internal_credentials:', payload.internal_credentials);
-                let decrypted = await decrypt(payload.internal_credentials);
-          
-                // Keep decrypting until we get a valid JSON or hit a limit
-                let attempts = 0;
-                const MAX_DECRYPT_ATTEMPTS = 3;
-                
-                while (attempts < MAX_DECRYPT_ATTEMPTS) {
-                  try {
-                    // Try to parse as JSON
-                    decryptedCredentials = JSON.parse(decrypted);
-                    break;
-                  } catch (e) {
-                    // If parsing fails, try decrypting again
-                    console.log(`Decryption attempt ${attempts + 1}:`, decrypted);
-                    decrypted = await decrypt(decrypted);
-                    attempts++;
-                  }
-                }
+        const columnTypes = new Map<string, string>();
 
-                if (!decryptedCredentials) {
-                  throw new Error(`Failed to decrypt credentials after ${MAX_DECRYPT_ATTEMPTS} attempts`);
-                }
-              } else {
-                decryptedCredentials = {
-                  host: await decrypt(payload.internal_credentials.host),
-                  username: await decrypt(payload.internal_credentials.username),
-                  password: await decrypt(payload.internal_credentials.password),
-                  database: await decrypt(payload.internal_credentials.database),
-                };
-              }
-
-              console.log("Connecting to ClickHouse", { 
-                host: decryptedCredentials.host,
-                username: decryptedCredentials.username,
-                database: decryptedCredentials.database,
-                password: decryptedCredentials.password
-              });
-
-              const clickhouse = createClickhouseClient({
-                url: decryptedCredentials.host,
-                username: decryptedCredentials.username,
-                password: decryptedCredentials.password,
-                database: decryptedCredentials.database,
-                request_timeout: 30000,
-              });
-
-                          // Test the connection before proceeding
-            await clickhouse.ping();
-            console.log("Successfully connected to ClickHouse");
-
-                // Create Snowflake connection
-                const snowflakeConnection = Snowflake.createConnection({
-                  account: payload.destination_credentials.account,
-                  username: payload.destination_credentials.username,
-                  password: payload.destination_credentials.password,
-                  database: payload.destination_credentials.database,
-                  warehouse: payload.destination_credentials.warehouse,
-                  schema: payload.destination_credentials.schema,
-                });
-        
-                // Connect to Snowflake
-                await new Promise((resolve, reject) => {
-                  snowflakeConnection.connect((err, conn) => {
-                    if (err) {
-                      console.error("Unable to connect to Snowflake:", err);
-                      reject(err);
-                    } else {
-                      console.log("Successfully connected to Snowflake.");
-                      resolve(conn);
+        // Process the result as an array
+        for await (const rows of describeResult.stream()) {
+            // Check if rows is an array
+            if (Array.isArray(rows)) {
+                for (const row of rows) {
+                    try {
+                        if (row && typeof row.text === 'string') {
+                            const columnDef = JSON.parse(row.text);
+                            if (columnDef.name && columnDef.type) {
+                                columnTypes.set(columnDef.name, columnDef.type);
+                                console.log(`Added column: ${columnDef.name}, Type: ${columnDef.type}`);
+                            }
+                        }
+                    } catch (parseError) {
+                        console.error('Error parsing column definition:', parseError);
+                        console.error('Raw row:', row);
                     }
-                  });
-                });
+                }
+            } else {
+                console.warn('Expected array of rows but got:', typeof rows);
+            }
+        }
 
-        // Stream data from Clickhouse
+        // Verify we have columns before proceeding
+        if (columnTypes.size === 0) {
+            throw new Error('No columns found in ClickHouse table');
+        }
+
+        // Log the collected column types
+        console.log('Collected column types:', Object.fromEntries(columnTypes));
+
+        // Connect to Snowflake
+        snowflakeConnection = Snowflake.createConnection({
+          account: payload.destination_credentials.account,
+          username: payload.destination_credentials.username,
+          password: payload.destination_credentials.password,
+          database: payload.destination_credentials.database,
+          warehouse: payload.destination_credentials.warehouse,
+          schema: payload.destination_credentials.schema,
+        });
+        
+        await new Promise((resolve, reject) => {
+          snowflakeConnection.connect((err: Error | undefined, conn: Connection) => {
+            if (err) {
+              console.error("Unable to connect to Snowflake:", err);
+              reject(err);
+            } else {
+              console.log("Successfully connected to Snowflake.");
+              resolve(conn);
+            }
+          });
+        });
+
+        // Create table in Snowflake if it doesn't exist
+        const createTableSQL = generateSnowflakeCreateTableSQL(
+          snowflakeTableName,
+          Array.from(columnTypes.entries()).map(([name, type]) => ({ name, type })),
+          payload.destination_type
+      );
+        
+        console.log('Generated Snowflake CREATE TABLE SQL:', createTableSQL);
+
+        await new Promise((resolve, reject) => {
+          snowflakeConnection.execute({
+            sqlText: createTableSQL,
+            complete: (err: any, stmt: any) => {
+              if (err) {
+                console.error("Failed to create table:", err);
+                reject(err);
+              } else {
+                console.log("Table created or already exists");
+                resolve(stmt);
+              }
+            }
+          });
+        });
+
+        // Execute the query with proper settings
         const resultStream = await clickhouse.query({
           query: payload.query,
           format: 'JSONEachRow',
           clickhouse_settings: {
-            wait_end_of_query: 1
+              wait_end_of_query: 1,
+          },
+      });  
+      
+      // Process the stream in batches
+      const batchSize = 1000;
+      let batch: any[] = [];
+      const stream = resultStream.stream() as AsyncIterable<any>;
+      
+      for await (const row of stream) {
+          const transformedRow: Record<string, any> = {};
+          
+          // Process each row and convert data types using actual ClickHouse types
+          for (const [key, value] of Object.entries(row)) {
+              const clickhouseType = columnTypes.get(key) || 'String';  // Default to String if type is missing
+              transformedRow[key] = convertClickhouseValue(value, clickhouseType, payload.destination_type);
+          }                     
+          batch.push(transformedRow);
+          
+          if (batch.length >= batchSize) {
+              await processBatch(batch, snowflakeTableName, snowflakeConnection);
+              batch = [];
           }
+      }
+      
+      // Process remaining records
+      if (batch.length > 0) {
+          await processBatch(batch, snowflakeTableName, snowflakeConnection);
+      }
+
+        // Clean up connections
+        await clickhouse.close();
+        await new Promise<void>((resolve, reject) => {
+          snowflakeConnection.destroy((err: Error | undefined) => {
+            if (err) {
+              console.error('Error destroying Snowflake connection:', err);
+              reject(err);
+            } else {
+              console.log('Snowflake connection destroyed successfully');
+              resolve();
+            }
+          });
         });
 
-        for await (const row of resultStream.stream()) {
-          const transformedRow: Record<string, any> = {};
-          for (const [key, value] of Object.entries(row)) {
-            const clickhouseType = typeof value; // You may need a better way to determine the type
-            transformedRow[key] = convertClickhouseValue(value, clickhouseType, targetWarehouseType);
+        return { success: true };
+      } catch (error) {
+        // Ensure connections are closed even if an error occurs
+        if (clickhouse) {
+          try {
+            await clickhouse.close();
+          } catch (closeError) {
+            console.error('Error closing ClickHouse connection:', closeError);
           }
-            // Validate and sanitize the table name
-            const tableName = sanitizeIdentifier(payload.table);
+        }
         
-            // Construct the upsert query with a sanitized table name
-            const upsertQuery = `
-            MERGE INTO ${tableName} AS target
-            USING (SELECT ? AS id, ? AS column1, ? AS column2) AS source
-            ON target.id = source.id
-            WHEN MATCHED THEN
-              UPDATE SET target.column1 = source.column1, target.column2 = source.column2
-            WHEN NOT MATCHED THEN
-              INSERT (id, column1, column2) VALUES (?, ?, ?);
-            `; 
-
-          // Execute the upsert query
-          await new Promise((resolve, reject) => {
-            snowflakeConnection.execute({
-              sqlText: upsertQuery,
-              binds: [transformedRow.id, transformedRow.column1, transformedRow.column2, transformedRow.id, transformedRow.column1, transformedRow.column2], // Adjust based on your actual columns
-              complete: (err, stmt) => {
-                if (err) {
-                  console.error("Failed to execute upsert:", err);
-                  reject(err);
-                } else {
-                  console.log("Upsert successful for row:", transformedRow);
-                  resolve(stmt);
-                }
+        if (snowflakeConnection) {
+          await new Promise<void>((resolve) => {
+            snowflakeConnection.destroy((err: Error | undefined) => {
+              if (err) {
+                console.error('Error destroying Snowflake connection:', err);
               }
+              resolve();
             });
           });
         }
 
-        return { success: true };
-      } catch (error) {
         console.error("Sync failed", { error });
         throw error;
       }
     });
   }
 );
+
+async function processBatch(batch: any[], tableName: string, snowflakeConnection: any): Promise<void> {
+  if (batch.length === 0) return;
+  
+  // Get column names from the first row
+  const columns = Object.keys(batch[0]);
+  const sanitizedTableName = sanitizeIdentifier(tableName);
+  
+  // Create a bulk insert statement
+  const columnList = columns.join(', ');
+  const valuesList = batch.map(row => 
+    `(${columns.map(col => JSON.stringify(row[col])).join(', ')})`
+  ).join(', ');
+  
+  const insertQuery = `
+    INSERT INTO ${sanitizedTableName} (${columnList})
+    VALUES ${valuesList}
+  `;
+
+  await new Promise((resolve, reject) => {
+    snowflakeConnection.execute({
+      sqlText: insertQuery,
+      complete: (err: any, stmt: any) => {
+        if (err) {
+          console.error("Failed to execute batch insert:", err);
+          reject(err);
+        } else {
+          console.log(`Successfully inserted ${batch.length} rows`);
+          resolve(stmt);
+        }
+      }
+    });
+  });
+}

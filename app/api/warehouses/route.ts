@@ -102,6 +102,7 @@ export async function POST(request: Request) {
   const supabase = createClient();
   const { userId, orgId } = auth();
   const slug = auth().orgSlug;
+  console.log(process.env.ENCRYPTION_KEY); // Should print the base64 encoded key
   
   if (!userId || !orgId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -109,6 +110,7 @@ export async function POST(request: Request) {
   
   try {
     const { internal_credentials, table_name} = await request.json();
+
     
     // Encrypt credentials before storing
     const encryptedCredentials = await encrypt(internal_credentials);
