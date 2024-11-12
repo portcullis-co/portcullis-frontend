@@ -56,12 +56,12 @@ function convertValue(value: any, clickhouseType: string): any {
     case 'VARCHAR': 
       return String(value);
 
-    case 'UInt8':
-    case 'UInt16':
-    case 'UInt32':
-    case 'Int8':
-    case 'Int16':
-    case 'Int32':
+    case 'UINT8':
+    case 'UINT16':
+    case 'UINT32':
+    case 'INT8':
+    case 'INT16':
+    case 'INT32':
     case 'INTEGER':  
       return Number(value);
 
