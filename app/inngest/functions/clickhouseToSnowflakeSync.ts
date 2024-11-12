@@ -124,33 +124,6 @@ function convertValue(value: any, clickhouseType: string): any {
 }
 
 
-// 1. Using TypeMappings
-function getSnowflakeDataType(clickhouseType: string): string {
-  const type = String(clickhouseType).trim().toUpperCase();
-  const processedType = type.startsWith('DECIMAL') ? type.slice(6) : type
-  return clickhouseToSnowflake.get(processedType.toUpperCase()) || clickhouseToSnowflake.get('default')!;
-}
-
-function convertWarehouseType(warehouse: WarehouseDataType): WarehouseDataType {
-  if ([
-    WarehouseDataType.Snowflake,
-    WarehouseDataType.BigQuery,
-    WarehouseDataType.Databricks
-  ].includes(warehouse)) {
-    return warehouse; // Return the valid warehouse type
-  }
-  throw new Error(`Invalid warehouse type: ${warehouse}`);
-}
-
-// 3. Using TypeMatrix for dynamic warehouse mapping
-function getWarehouseType(sourceType: string, targetWarehouse: WarehouseDataType): string {
-  const mappings = typeMatrix.get(targetWarehouse);
-  if (!mappings) {
-    throw new Error(`No type mappings found for warehouse: ${targetWarehouse}`);
-  }
-  return mappings.get(sourceType) || 'STRING';
-}
-
 function getFinalSnowflakeType(clickhouseType: string, destinationType: WarehouseDataType): string {
   if (!clickhouseType) {
     console.warn('ClickHouse type is undefined or null, defaulting to VARCHAR');
@@ -158,7 +131,9 @@ function getFinalSnowflakeType(clickhouseType: string, destinationType: Warehous
   }
 
   // Step 1: Get base Snowflake type
-  const baseType = getSnowflakeDataType(clickhouseType);
+  const type = String(clickhouseType).trim().toUpperCase();
+  const processedType = type.startsWith('DECIMAL') ? type.slice(6) : type
+  const baseType = clickhouseToSnowflake.get(processedType.toUpperCase()) || clickhouseToSnowflake.get('default')!;
 
   // Step 2: Convert to specific warehouse type if needed
   let snowflakeType: string;
