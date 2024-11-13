@@ -8,17 +8,7 @@ import { TypeMappings, WarehouseDataType, ClickhouseCredentials, SnowflakeCreden
 import { clickhouseToSnowflake, typeMatrix } from "@/lib/common/types/clickhouse";
 import { json } from "stream/consumers";
 import { error } from "console";
-
-// Utility function to sanitize the table name
-export function sanitizeIdentifier(identifier: string, toUpperCase: boolean = false): string {
-  // Remove any invalid characters and spaces
-  const sanitized = identifier
-      .replace(/[^\w\d_]/g, '_')  // Replace invalid chars with underscore
-      .replace(/^[\d]/, '_$&');   // Prefix with underscore if starts with number
-  
-  // Only convert to uppercase if explicitly requested (for Snowflake)
-  return toUpperCase ? sanitized.toUpperCase() : sanitized;
-}
+import { sanitizeIdentifier } from "@/lib/queryBuilder";
 
 // Add type definition
 interface SnowflakeSyncPayload {
@@ -28,21 +18,11 @@ interface SnowflakeSyncPayload {
   query: string;
   table: string;
   organization: string;
-  internal_warehouse: string;
-  tenancy_column?: string; // This is the column that contains the tenancy identifier
-  tenancy_id?: string; // This is the identifier for the tenancy
-  scheduled_at?: string;
-}
-
-
-function StartsWithDecimal(clickhouseType: string): boolean {
-  return clickhouseType.startsWith("Decimal");
 }
 
 // Function to convert value based on warehouse type
 //https://clickhouse.com/docs/en/sql-reference/data-types/data-types-binary-encoding
 function convertValue(value: any, clickhouseType: string): any {
-  console.log('Fuck Malvious:', value);
   if (!clickhouseType) {
     console.error('Received undefined or null ClickHouse type.');
     return 'thisisanerrormessage_001';
@@ -70,12 +50,12 @@ function convertValue(value: any, clickhouseType: string): any {
     case 'INTEGER':  
       return Number(value);
 
-    case 'Int64':
-    case 'Int128':
-    case 'Int256':
-    case 'UInt64':
-    case 'UInt128':
-    case 'UInt256': 
+    case 'INT64':
+    case 'INT128':
+    case 'INT256':
+    case 'UINT64':
+    case 'UINT128':
+    case 'UINT256': 
       return BigInt(value);
 
     case 'FLOAT32':
@@ -147,7 +127,6 @@ function getFinalSnowflakeType(clickhouseType: string, destinationType: Warehous
   https://clickhouse.com/docs/en/sql-reference/data-types/decimal
   https://docs.snowflake.com/en/sql-reference/data-types-numeric
   */
-  console.log('baseType', baseType);
   return baseType || 'VARCHAR';
 }
 
@@ -328,16 +307,7 @@ export const clickhouseToSnowflakeSync = inngest.createFunction(
           clickhouse_settings: {
               wait_end_of_query: 1,
           },
-          query_params: {
-            p0: payload.tenancy_id // This should match the tenancy_id parameter
-          }
       });  
-
-      console.log('Executing ClickHouse query:', {
-        query: payload.query,
-        params: { p0: payload.tenancy_id }, // This should match the tenancy_id parameter
-        format: 'JSONEachRow'
-      });
       
       // Process the stream in batches
       const batchSize = 1000;
@@ -353,26 +323,17 @@ export const clickhouseToSnowflakeSync = inngest.createFunction(
     
             // Check if value is a JSON string and parse it if needed
                 try {
-                    
-                    interface ClickhouseRow {
-                      text: string;
-                      json: Function;
-                  }
-                  const jsonStr = typeof value === 'object' && value !== null && 'text' in value 
-                  ? (value as ClickhouseRow).text 
-                  : JSON.stringify(value);
-                  
-                const parsedJson = JSON.parse(jsonStr);
+                    const parsedJson = JSON.parse(value.text);
     
                     // Process each key-value pair in the parsed JSON
                     for (const [jsonKey, jsonValue] of Object.entries(parsedJson)) {
                         const jsonClickhouseType = columnTypes.get(jsonKey) || 'String'; // Use type for each JSON key
-                        transformedRow[jsonKey] = convertClickhouseValue(jsonValue, jsonClickhouseType, payload.destination_type);
+                        transformedRow[jsonKey] = convertValue(jsonValue, jsonClickhouseType);
                     }
                 } catch (error) {
                     console.error("Failed to parse JSON:", error);
                     // Fallback: Convert the raw JSON text if parsing fails
-                    transformedRow[key] = convertClickhouseValue(value, clickhouseType, payload.destination_type);
+                    transformedRow[key] = convertValue(value.text, clickhouseType);
                 }
         }
     
@@ -382,7 +343,8 @@ export const clickhouseToSnowflakeSync = inngest.createFunction(
             await processBatch(batch, snowflakeTableName, snowflakeConnection);
             batch = [];
         }
-      }
+    }
+    
 
         // Clean up connections
         await clickhouse.close();
@@ -427,35 +389,24 @@ export const clickhouseToSnowflakeSync = inngest.createFunction(
   }
 );
 
-// Helper function to format values for Snowflake SQL
-function formatValue(value: any): string {
-  if (value === null || value === undefined) return 'NULL';
-  if (typeof value === 'string') return `'${value.replace(/'/g, "''")}'`; // Escape single quotes
-  if (typeof value === 'number' || typeof value === 'boolean') return value.toString();
-  if (value instanceof Date) return `'${value.toISOString()}'`; // Format dates in ISO format
-  return `'${value}'`; // Default to treating value as a string
-}
-
 async function processBatch(batch: any[], tableName: string, snowflakeConnection: any): Promise<void> {
   if (batch.length === 0) return;
   
-  // Get column names from the first row and sanitize
+  // Get column names from the first row
   const columns = Object.keys(batch[0]);
-  const sanitizedTableName = sanitizeIdentifier(tableName, true);
+  const sanitizedTableName = sanitizeIdentifier(tableName);
   
-  // Construct the bulk insert query
+  // Create a bulk insert statement
   const columnList = columns.join(', ');
   const valuesList = batch.map(row => 
-    `(${columns.map(col => formatValue(row[col])).join(', ')})`
-  ).join(',\n');
+    `(${columns.map(col => JSON.stringify(row[col])).join(', ')})`
+  ).join(', ');
   
   const insertQuery = `
     INSERT INTO ${sanitizedTableName} (${columnList})
-    VALUES ${valuesList};
+    VALUES ${valuesList}
   `;
 
-  console.log('Insert Query:', insertQuery);
-  // Execute the query
   await new Promise((resolve, reject) => {
     snowflakeConnection.execute({
       sqlText: insertQuery,

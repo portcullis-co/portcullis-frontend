@@ -15,7 +15,9 @@ interface QueryParams {
     columns?: string[];
 }
 
-// Generalized query builder function
+function StartsWithDecimal(clickhouseType: string): boolean {
+    return clickhouseType.startsWith("Decimal");
+  }
 
 interface QueryParams {
     table: string;
