@@ -408,8 +408,9 @@ function formatValue(value: any): string {
   if (value === null || value === undefined) return 'NULL';
   if (typeof value === 'string') return `'${value.replace(/'/g, "''")}'`; // Escape single quotes
   if (typeof value === 'number' || typeof value === 'boolean') return value.toString();
-  if (value instanceof Date) return `'${value.toISOString()}'`; // Format dates in ISO format
-  return `'${value}'`; // Default to treating value as a string
+  if (value instanceof Date) return `'${value.toISOString()}'`;
+  if (typeof value === 'object') return `'${JSON.stringify(value).replace(/'/g, "''")}'`; // Serialize objects
+  return `'${value}'`;
 }
 
 async function processBatch(batch: any[], tableName: string, snowflakeConnection: any): Promise<void> {
@@ -417,33 +418,42 @@ async function processBatch(batch: any[], tableName: string, snowflakeConnection
   if (batch.length === 0) return;
   
   // Force uppercase for Snowflake
-  const columns = Object.keys(batch[0]).map(col => col);
+  const columns = Object.keys(batch[0]).map(col => col); // Ensure uppercase
   const sanitizedTableName = sanitizeIdentifier(tableName, false);
 
   const columnList = columns.map(col => `"${col}"`).join(', ');
   const valuesList = batch.map(row => 
-    `(${Object.keys(row).map(col => formatValue(row[col])).join(', ')})`
+    `(${columns.map(col => formatValue(row[col])).join(', ')})` // Use `columns` to ensure consistent ordering
   ).join(',\n');
   
   const insertQuery = `
     INSERT INTO "${sanitizedTableName}" (${columnList})
     VALUES ${valuesList}
-  `;
+  ;`;
 
   console.log('Insert Query:', insertQuery);
-  
-  await new Promise((resolve, reject) => {
-    snowflakeConnection.execute({
-      sqlText: insertQuery,
-      complete: (err: any, stmt: any) => {
-        if (err) {
-          console.error("Failed to execute batch insert:", err);
-          reject(err);
-        } else {
-          console.log(`Successfully inserted ${batch.length} rows`);
-          resolve(stmt);
-        }
+  let attempt = 0;
+  let retryCount = 3;
+  while (attempt < retryCount) {
+    try {
+      await new Promise((resolve, reject) => {
+        snowflakeConnection.execute({
+          sqlText: insertQuery,
+          complete: (err: any, stmt: any) => {
+            if (err) reject(err);
+            else resolve(stmt);
+          }
+        });
+      });
+      console.log(`Successfully inserted ${batch.length} rows`);
+      return;
+    } catch (error) {
+      attempt++;
+      if (attempt >= retryCount) {
+        console.error("Failed to insert batch after retries:", error);
+        throw error;
       }
-    });
-  });
+      console.log(`Retrying batch insert, attempt ${attempt + 1}`);
+    }
+  }
 }
