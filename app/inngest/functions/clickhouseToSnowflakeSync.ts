@@ -27,7 +27,7 @@ interface SnowflakeSyncPayload {
 // Function to convert value based on warehouse type
 //https://clickhouse.com/docs/en/sql-reference/data-types/data-types-binary-encoding
 function convertValue(value: any, clickhouseType: string): any {
-  console.log('Fuck Malvious');
+  // console.log('Fuck Malvious');
   if (!clickhouseType) {
     console.error('Received undefined or null ClickHouse type.');
     return 'thisisanerrormessage_001';
@@ -320,45 +320,41 @@ export const clickhouseToSnowflakeSync = inngest.createFunction(
       let batch: any[] = [];
       
       const stream = resultStream.stream() as AsyncIterable<any>;
-      
+
       for await (const row of stream) {
         const transformedRow: Record<string, any> = {};
     
-        // Process each row and convert data types using actual ClickHouse types
         for (const [key, value] of Object.entries(row)) {
-            const clickhouseType = columnTypes.get(key) || 'String'; // Default to String if type is missing
+            const clickhouseType = columnTypes.get(key) || 'String';
     
-            // Check if value is a JSON string and parse it if needed
+            if (typeof value === 'object' && value !== null && 'text' in value && typeof value.text === 'string') {
                 try {
-                  interface ClickhouseRow {
-                    text: string;
-                    json: Function;
-                }
-                const jsonStr = typeof value === 'object' && value !== null && 'text' in value 
-                ? (value as ClickhouseRow).text 
-                : JSON.stringify(value);
-                
-                const parsedJson = JSON.parse(jsonStr);
+                    // Parse JSON and store it under the original key in transformedRow
+                    const parsedJson = JSON.parse(value.text);
+                    transformedRow[key] = {};
     
-                    // Process each key-value pair in the parsed JSON
                     for (const [jsonKey, jsonValue] of Object.entries(parsedJson)) {
-                        const jsonClickhouseType = columnTypes.get(jsonKey) || 'String'; // Use type for each JSON key
-                        transformedRow[jsonKey] = convertValue(jsonValue, jsonClickhouseType);
+                        const jsonClickhouseType = columnTypes.get(jsonKey) || 'String';
+                        transformedRow[key][jsonKey] = convertValue(jsonValue, jsonClickhouseType);
                     }
                 } catch (error) {
                     console.error("Failed to parse JSON:", error);
-                    // Fallback: Convert the raw JSON text if parsing fails
-                    transformedRow[key] = convertValue(value, clickhouseType);
+                    transformedRow[key] = convertValue(value.text, clickhouseType);
                 }
+            } else {
+                transformedRow[key] = convertValue(value, clickhouseType);
+            }
         }
     
         batch.push(transformedRow);
+        console.log("BATCH SIZE:",batch.length);
     
         if (batch.length >= batchSize) {
             await processBatch(batch, snowflakeTableName, snowflakeConnection);
             batch = [];
         }
     }
+    
 
     if (batch.length > 0) {
       await processBatch(batch, snowflakeTableName, snowflakeConnection);
