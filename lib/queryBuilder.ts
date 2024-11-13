@@ -15,15 +15,15 @@ interface QueryParams {
     columns?: string[];
 }
 
-function StartsWithDecimal(clickhouseType: string): boolean {
-    return clickhouseType.startsWith("Decimal");
-  }
-
 interface QueryParams {
     table: string;
     conditions?: { [column: string]: any };
     columns?: string[];
 }
+
+function StartsWithDecimal(clickhouseType: string): boolean {
+    return clickhouseType.startsWith("Decimal");
+  }
 
 export function buildClickHouseQuery({
     table,

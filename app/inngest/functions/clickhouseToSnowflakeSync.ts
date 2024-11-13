@@ -18,11 +18,16 @@ interface SnowflakeSyncPayload {
   query: string;
   table: string;
   organization: string;
+  internal_warehouse: string;
+  tenancy_column?: string;
+  tenancy_id?: string;
+  scheduled_at?: string;
 }
 
 // Function to convert value based on warehouse type
 //https://clickhouse.com/docs/en/sql-reference/data-types/data-types-binary-encoding
 function convertValue(value: any, clickhouseType: string): any {
+  console.log('Fuck Malvious');
   if (!clickhouseType) {
     console.error('Received undefined or null ClickHouse type.');
     return 'thisisanerrormessage_001';
@@ -137,9 +142,8 @@ function generateSnowflakeCreateTableSQL(
   destinationType: WarehouseDataType
 ): string {
   // Sanitize table name for Snowflake (uppercase)
-  const sanitizedTableName = sanitizeIdentifier(tableName, true);
+  const sanitizedTableName = sanitizeIdentifier(tableName, false);
   
-  // Build column definitions with proper quoting - no newlines
   const columnDefinitions = columns
     .map(column => {
       const sanitizedName = sanitizeIdentifier(column.name, false);
@@ -148,7 +152,6 @@ function generateSnowflakeCreateTableSQL(
     })
     .join(', ');
 
-  // Create single-line SQL statement
   return `CREATE TABLE IF NOT EXISTS "${sanitizedTableName}" (${columnDefinitions})`;
 }
 
@@ -158,7 +161,6 @@ function convertClickhouseValue(value: any, clickhouseType: string, destinationT
 
   const snowflakeType = getFinalSnowflakeType(clickhouseType, destinationType);
   if (!clickhouseType) {
-    console.log('No Clickhouse type provided');
     throw new Error('No Clickhouse type provided');
   }
   else {
@@ -200,7 +202,6 @@ export const clickhouseToSnowflakeSync = inngest.createFunction(
 
         // Test ClickHouse connection
         await clickhouse.ping();
-        console.log("Successfully connected to ClickHouse");
 
         // Extract table name from the query
         const tableMatch = payload.query.match(/FROM\s+([^\s;]+)/i);
@@ -212,7 +213,7 @@ export const clickhouseToSnowflakeSync = inngest.createFunction(
         const originalTableName = tableMatch[1].replace(/[`"]/g, '');
         const clickhouseTableName = sanitizeIdentifier(originalTableName, false);
         // Use uppercase for Snowflake operations
-        const snowflakeTableName = sanitizeIdentifier(originalTableName, true);
+        const snowflakeTableName = sanitizeIdentifier(originalTableName, false);
 
 
         // Get table structure
@@ -233,7 +234,6 @@ export const clickhouseToSnowflakeSync = inngest.createFunction(
                             const columnDef = JSON.parse(row.text);
                             if (columnDef.name && columnDef.type) {
                                 columnTypes.set(columnDef.name, columnDef.type);
-                                console.log(`Added column: ${columnDef.name}, Type: ${columnDef.type}`);
                             }
                         }
                     } catch (parseError) {
@@ -252,7 +252,6 @@ export const clickhouseToSnowflakeSync = inngest.createFunction(
         }
 
         // Log the collected column types
-        console.log('Collected column types:', Object.fromEntries(columnTypes));
 
         // Connect to Snowflake
         snowflakeConnection = Snowflake.createConnection({
@@ -267,10 +266,8 @@ export const clickhouseToSnowflakeSync = inngest.createFunction(
         await new Promise((resolve, reject) => {
           snowflakeConnection.connect((err: Error | undefined, conn: Connection) => {
             if (err) {
-              console.error("Unable to connect to Snowflake:", err);
               reject(err);
             } else {
-              console.log("Successfully connected to Snowflake.");
               resolve(conn);
             }
           });
@@ -307,11 +304,21 @@ export const clickhouseToSnowflakeSync = inngest.createFunction(
           clickhouse_settings: {
               wait_end_of_query: 1,
           },
+          query_params: {
+            p0: payload.tenancy_id // This should match the tenancy_id parameter
+          }
       });  
+
+      console.log('Executing ClickHouse query:', {
+        query: payload.query,
+        params: { p0: payload.tenancy_id }, // This should match the tenancy_id parameter
+        format: 'JSONEachRow'
+      });
       
       // Process the stream in batches
       const batchSize = 1000;
       let batch: any[] = [];
+      
       const stream = resultStream.stream() as AsyncIterable<any>;
       
       for await (const row of stream) {
@@ -323,7 +330,15 @@ export const clickhouseToSnowflakeSync = inngest.createFunction(
     
             // Check if value is a JSON string and parse it if needed
                 try {
-                    const parsedJson = JSON.parse(value.text);
+                  interface ClickhouseRow {
+                    text: string;
+                    json: Function;
+                }
+                const jsonStr = typeof value === 'object' && value !== null && 'text' in value 
+                ? (value as ClickhouseRow).text 
+                : JSON.stringify(value);
+                
+                const parsedJson = JSON.parse(jsonStr);
     
                     // Process each key-value pair in the parsed JSON
                     for (const [jsonKey, jsonValue] of Object.entries(parsedJson)) {
@@ -333,7 +348,7 @@ export const clickhouseToSnowflakeSync = inngest.createFunction(
                 } catch (error) {
                     console.error("Failed to parse JSON:", error);
                     // Fallback: Convert the raw JSON text if parsing fails
-                    transformedRow[key] = convertValue(value.text, clickhouseType);
+                    transformedRow[key] = convertValue(value, clickhouseType);
                 }
         }
     
@@ -343,6 +358,10 @@ export const clickhouseToSnowflakeSync = inngest.createFunction(
             await processBatch(batch, snowflakeTableName, snowflakeConnection);
             batch = [];
         }
+    }
+
+    if (batch.length > 0) {
+      await processBatch(batch, snowflakeTableName, snowflakeConnection);
     }
     
 
@@ -389,24 +408,34 @@ export const clickhouseToSnowflakeSync = inngest.createFunction(
   }
 );
 
+function formatValue(value: any): string {
+  if (value === null || value === undefined) return 'NULL';
+  if (typeof value === 'string') return `'${value.replace(/'/g, "''")}'`; // Escape single quotes
+  if (typeof value === 'number' || typeof value === 'boolean') return value.toString();
+  if (value instanceof Date) return `'${value.toISOString()}'`; // Format dates in ISO format
+  return `'${value}'`; // Default to treating value as a string
+}
+
 async function processBatch(batch: any[], tableName: string, snowflakeConnection: any): Promise<void> {
+  console.log('Processing batch:', batch);
   if (batch.length === 0) return;
   
-  // Get column names from the first row
-  const columns = Object.keys(batch[0]);
-  const sanitizedTableName = sanitizeIdentifier(tableName);
-  
-  // Create a bulk insert statement
-  const columnList = columns.join(', ');
+  // Force uppercase for Snowflake
+  const columns = Object.keys(batch[0]).map(col => col);
+  const sanitizedTableName = sanitizeIdentifier(tableName, false);
+
+  const columnList = columns.map(col => `"${col}"`).join(', ');
   const valuesList = batch.map(row => 
-    `(${columns.map(col => JSON.stringify(row[col])).join(', ')})`
-  ).join(', ');
+    `(${Object.keys(row).map(col => formatValue(row[col])).join(', ')})`
+  ).join(',\n');
   
   const insertQuery = `
-    INSERT INTO ${sanitizedTableName} (${columnList})
+    INSERT INTO "${sanitizedTableName}" (${columnList})
     VALUES ${valuesList}
   `;
 
+  console.log('Insert Query:', insertQuery);
+  
   await new Promise((resolve, reject) => {
     snowflakeConnection.execute({
       sqlText: insertQuery,
