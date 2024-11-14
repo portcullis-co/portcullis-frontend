@@ -181,6 +181,8 @@ export const clickhouseToSnowflakeSync = inngest.createFunction(
     const payload = event.data as SnowflakeSyncPayload;
     let clickhouse: any = null;
     let snowflakeConnection: any = null;
+    let batch: any[] = [];
+    const batchSize = 1000;
     
     return await step.run("sync-data", async () => {
       try {
@@ -218,42 +220,50 @@ export const clickhouseToSnowflakeSync = inngest.createFunction(
 
         // Get table structure
         const describeResult = await clickhouse.query({
-          query: `DESCRIBE TABLE "${clickhouseTableName}"`,
-          format: 'JSONEachRow'
-      });
+            query: `DESCRIBE TABLE "${clickhouseTableName}"`,
+            format: 'JSONCompact'
+        });
         
         const columnTypes = new Map<string, string>();
-
-        // Process the result as an array
-        for await (const rows of describeResult.stream()) {
-            // Check if rows is an array
-            if (Array.isArray(rows)) {
-                for (const row of rows) {
-                    try {
-                        if (row && typeof row.text === 'string') {
-                            const columnDef = JSON.parse(row.text);
-                            if (columnDef.name && columnDef.type) {
-                                columnTypes.set(columnDef.name, columnDef.type);
-                            }
-                        }
-                    } catch (parseError) {
-                        console.error('Error parsing column definition:', parseError);
-                        console.error('Raw row:', row);
+        
+        // Add debug logging
+        console.log('Fetching table structure...');
+        
+        try {
+            const result = await describeResult.json();
+            console.log('Raw describe result:', JSON.stringify(result, null, 2));  // Pretty print the result
+            
+            if (result && Array.isArray(result.data)) {
+                for (const row of result.data) {
+                    // Assuming the first column is name and second is type based on JSONCompact format
+                    const [name, type] = row;
+                    if (name && type) {
+                        columnTypes.set(name, type);
+                        console.log(`Found column: ${name} (${type})`);
                     }
                 }
-            } else {
-                console.warn('Expected array of rows but got:', typeof rows);
             }
+
+            console.log('Found columns:', Array.from(columnTypes.entries()));
+
+            if (columnTypes.size === 0) {
+                throw new Error(`No columns found in ClickHouse table: ${clickhouseTableName}`);
+            }
+        } catch (error) {
+            console.error('Error processing table structure:', error);
+            console.error('Raw response:', await describeResult.text());  // Log raw response
+            throw error;
         }
 
         // Verify we have columns before proceeding
         if (columnTypes.size === 0) {
-            throw new Error('No columns found in ClickHouse table');
+            console.error('Table structure:', await describeResult.json()); // Debug log
+            throw new Error(`No columns found in ClickHouse table: ${clickhouseTableName}`);
         }
 
         // Log the collected column types
 
-        // Connect to Snowflake
+        // Connect to Snowflake and set schema
         snowflakeConnection = Snowflake.createConnection({
           account: payload.destination_credentials.account,
           username: payload.destination_credentials.username,
@@ -264,11 +274,36 @@ export const clickhouseToSnowflakeSync = inngest.createFunction(
         });
         
         await new Promise((resolve, reject) => {
-          snowflakeConnection.connect((err: Error | undefined, conn: Connection) => {
+          snowflakeConnection.connect(async (err: Error | undefined, conn: Connection) => {
             if (err) {
               reject(err);
             } else {
-              resolve(conn);
+              try {
+                // Execute statements sequentially
+                await new Promise((r, j) => conn.execute({
+                  sqlText: `CREATE DATABASE IF NOT EXISTS "${payload.destination_credentials.database}"`,
+                  complete: (err: any) => err ? j(err) : r(null)
+                }));
+
+                await new Promise((r, j) => conn.execute({
+                  sqlText: `USE DATABASE "${payload.destination_credentials.database}"`,
+                  complete: (err: any) => err ? j(err) : r(null)
+                }));
+
+                await new Promise((r, j) => conn.execute({
+                  sqlText: `CREATE SCHEMA IF NOT EXISTS "${payload.destination_credentials.schema}"`,
+                  complete: (err: any) => err ? j(err) : r(null)
+                }));
+
+                await new Promise((r, j) => conn.execute({
+                  sqlText: `USE SCHEMA "${payload.destination_credentials.schema}"`,
+                  complete: (err: any) => err ? j(err) : r(null)
+                }));
+
+                resolve(conn);
+              } catch (error) {
+                reject(error);
+              }
             }
           });
         });
@@ -297,69 +332,98 @@ export const clickhouseToSnowflakeSync = inngest.createFunction(
           });
         });
 
-        // Execute the query with proper settings
+        // Modify the query execution section
         const resultStream = await clickhouse.query({
-          query: payload.query,
-          format: 'JSONEachRow',
-          clickhouse_settings: {
-              wait_end_of_query: 1,
-          },
-          query_params: {
-            p0: payload.tenancy_id // This should match the tenancy_id parameter
-          }
-      });  
-
-      console.log('Executing ClickHouse query:', {
-        query: payload.query,
-        params: { p0: payload.tenancy_id }, // This should match the tenancy_id parameter
-        format: 'JSONEachRow'
-      });
-      
-      // Process the stream in batches
-      const batchSize = 1000;
-      let batch: any[] = [];
-      
-      const stream = resultStream.stream() as AsyncIterable<any>;
-
-      for await (const row of stream) {
-        const transformedRow: Record<string, any> = {};
-    
-        for (const [key, value] of Object.entries(row)) {
-            const clickhouseType = columnTypes.get(key) || 'String';
-    
-            if (typeof value === 'object' && value !== null && 'text' in value && typeof value.text === 'string') {
-                try {
-                    // Parse JSON and store it under the original key in transformedRow
-                    const parsedJson = JSON.parse(value.text);
-                    transformedRow[key] = {};
-    
-                    for (const [jsonKey, jsonValue] of Object.entries(parsedJson)) {
-                        const jsonClickhouseType = columnTypes.get(jsonKey) || 'String';
-                        transformedRow[key][jsonKey] = convertValue(jsonValue, jsonClickhouseType);
-                    }
-                } catch (error) {
-                    console.error("Failed to parse JSON:", error);
-                    transformedRow[key] = convertValue(value.text, clickhouseType);
-                }
-            } else {
-                transformedRow[key] = convertValue(value, clickhouseType);
+            query: payload.query,
+            format: 'JSONEachRow',
+            clickhouse_settings: {
+                wait_end_of_query: 1,
+            },
+            query_params: {
+                p0: payload.tenancy_id
             }
-        }
-    
-        batch.push(transformedRow);
-        console.log("BATCH SIZE:",batch.length);
-    
-        if (batch.length >= batchSize) {
-            await processBatch(batch, snowflakeTableName, snowflakeConnection);
-            batch = [];
-        }
-    }
-    
+        });  
 
-    if (batch.length > 0) {
-      await processBatch(batch, snowflakeTableName, snowflakeConnection);
-    }
-    
+        console.log('Starting stream processing...');
+        
+        let rowCount = 0;
+        const stream = resultStream.stream();
+
+        try {
+            for await (const row of stream) {
+                console.log('Raw row data:', row); // Debug logging
+                
+                // Skip empty rows
+                if (!row || Object.keys(row).length === 0) {
+                    console.warn('Empty row received, skipping');
+                    continue;
+                }
+
+                const processedRow: Record<string, any> = {};
+                let hasValidData = true;
+                
+                for (const [columnName, columnType] of Array.from(columnTypes.entries())) {
+                    let value = row[columnName];
+                    
+                    // Skip row if required fields are missing or undefined
+                    if (value === undefined || value === null) {
+                        console.warn(`Missing or null value for column ${columnName} in row:`, row);
+                        hasValidData = false;
+                        break;
+                    }
+                    
+                    try {
+                        const convertedValue = convertValue(value, columnType);
+                        // Additional validation for specific types
+                        if (columnType.includes('DateTime') && !convertedValue) {
+                            console.warn(`Invalid datetime value for column ${columnName}:`, value);
+                            hasValidData = false;
+                            break;
+                        }
+                        processedRow[columnName] = convertedValue;
+                    } catch (conversionError) {
+                        console.error(`Error converting value for column ${columnName}:`, value, conversionError);
+                        hasValidData = false;
+                        break;
+                    }
+                }
+                
+                // Only insert if all data is valid
+                if (hasValidData && Object.keys(processedRow).length === columnTypes.size) {
+                    try {
+                        await insertRow(processedRow, snowflakeTableName, snowflakeConnection);
+                        rowCount++;
+                        
+                        if (rowCount % 100 === 0) {
+                            console.log(`Successfully processed ${rowCount} rows`);
+                        }
+                    } catch (insertError) {
+                        console.error('Failed to insert row:', processedRow, insertError);
+                        throw insertError;
+                    }
+                }
+            }
+
+            console.log(`Completed processing ${rowCount} total rows`);
+
+        } catch (streamError) {
+            console.error('Error processing stream:', streamError);
+            throw streamError;
+        }
+
+        // Also let's verify the query is correct by logging the exact SQL being executed
+        console.log('Executing raw SQL query:', payload.query.replace('{p0:String}', `'${payload.tenancy_id}'`));
+
+        // Add a test query to verify data exists
+        const testQuery = await clickhouse.query({
+            query: `SELECT COUNT(*) as count FROM "${clickhouseTableName}" WHERE org_id = {p0:String}`,
+            query_params: {
+                p0: payload.tenancy_id
+            }
+        });
+
+        const testResult = await testQuery.json();
+        console.log('Test query result:', testResult);
 
         // Clean up connections
         await clickhouse.close();
@@ -413,47 +477,30 @@ function formatValue(value: any): string {
   return `'${value}'`;
 }
 
-async function processBatch(batch: any[], tableName: string, snowflakeConnection: any): Promise<void> {
-  console.log('Processing batch:', batch);
-  if (batch.length === 0) return;
-  
-  // Force uppercase for Snowflake
-  const columns = Object.keys(batch[0]).map(col => col); // Ensure uppercase
-  const sanitizedTableName = sanitizeIdentifier(tableName, false);
+// Replace streamInsertChunks with single row insert
+async function insertRow(row: Record<string, any>, tableName: string, snowflakeConnection: any): Promise<void> {
+    const sanitizedTableName = sanitizeIdentifier(tableName, false);
+    const columns = Object.keys(row);
+    const columnList = columns.map(col => `"${sanitizeIdentifier(col, false)}"`).join(', ');
+    const values = columns.map(col => formatValue(row[col]));
+    
+    const insertQuery = `
+        INSERT INTO "${sanitizedTableName}" (${columnList})
+        VALUES (${values.join(', ')})
+    `;
 
-  const columnList = columns.map(col => `"${col}"`).join(', ');
-  const valuesList = batch.map(row => 
-    `(${columns.map(col => formatValue(row[col])).join(', ')})` // Use `columns` to ensure consistent ordering
-  ).join(',\n');
-  
-  const insertQuery = `
-    INSERT INTO "${sanitizedTableName}" (${columnList})
-    VALUES ${valuesList}
-  ;`;
-
-  console.log('Insert Query:', insertQuery);
-  let attempt = 0;
-  let retryCount = 3;
-  while (attempt < retryCount) {
-    try {
-      await new Promise((resolve, reject) => {
+    await new Promise((resolve, reject) => {
         snowflakeConnection.execute({
-          sqlText: insertQuery,
-          complete: (err: any, stmt: any) => {
-            if (err) reject(err);
-            else resolve(stmt);
-          }
+            sqlText: insertQuery,
+            complete: (err: any, stmt: any) => {
+                if (err) {
+                    console.error('Insert error:', err);
+                    console.error('Failed Query:', insertQuery);
+                    reject(err);
+                } else {
+                    resolve(stmt);
+                }
+            }
         });
-      });
-      console.log(`Successfully inserted ${batch.length} rows`);
-      return;
-    } catch (error) {
-      attempt++;
-      if (attempt >= retryCount) {
-        console.error("Failed to insert batch after retries:", error);
-        throw error;
-      }
-      console.log(`Retrying batch insert, attempt ${attempt + 1}`);
-    }
-  }
+    });
 }
