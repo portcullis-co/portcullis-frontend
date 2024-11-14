@@ -342,7 +342,7 @@ export const clickhouseToSnowflakeSync = inngest.createFunction(
             query_params: {
                 p0: payload.tenancy_id
             }
-        });  
+        });
 
         console.log('Starting stream processing...');
         
@@ -350,59 +350,7 @@ export const clickhouseToSnowflakeSync = inngest.createFunction(
         const stream = resultStream.stream();
 
         try {
-            for await (const row of stream) {
-                console.log('Raw row data:', row); // Debug logging
-                
-                // Skip empty rows
-                if (!row || Object.keys(row).length === 0) {
-                    console.warn('Empty row received, skipping');
-                    continue;
-                }
-
-                const processedRow: Record<string, any> = {};
-                let hasValidData = true;
-                
-                for (const [columnName, columnType] of Array.from(columnTypes.entries())) {
-                    let value = row[columnName];
-                    
-                    // Skip row if required fields are missing or undefined
-                    if (value === undefined || value === null) {
-                        console.warn(`Missing or null value for column ${columnName} in row:`, row);
-                        hasValidData = false;
-                        break;
-                    }
-                    
-                    try {
-                        const convertedValue = convertValue(value, columnType);
-                        // Additional validation for specific types
-                        if (columnType.includes('DateTime') && !convertedValue) {
-                            console.warn(`Invalid datetime value for column ${columnName}:`, value);
-                            hasValidData = false;
-                            break;
-                        }
-                        processedRow[columnName] = convertedValue;
-                    } catch (conversionError) {
-                        console.error(`Error converting value for column ${columnName}:`, value, conversionError);
-                        hasValidData = false;
-                        break;
-                    }
-                }
-                
-                // Only insert if all data is valid
-                if (hasValidData && Object.keys(processedRow).length === columnTypes.size) {
-                    try {
-                        await insertRow(processedRow, snowflakeTableName, snowflakeConnection);
-                        rowCount++;
-                        
-                        if (rowCount % 100 === 0) {
-                            console.log(`Successfully processed ${rowCount} rows`);
-                        }
-                    } catch (insertError) {
-                        console.error('Failed to insert row:', processedRow, insertError);
-                        throw insertError;
-                    }
-                }
-            }
+            rowCount = await processClickHouseStream(stream, snowflakeConnection, snowflakeTableName);
 
             console.log(`Completed processing ${rowCount} total rows`);
 
@@ -478,29 +426,60 @@ function formatValue(value: any): string {
 }
 
 // Replace streamInsertChunks with single row insert
-async function insertRow(row: Record<string, any>, tableName: string, snowflakeConnection: any): Promise<void> {
-    const sanitizedTableName = sanitizeIdentifier(tableName, false);
-    const columns = Object.keys(row);
-    const columnList = columns.map(col => `"${sanitizeIdentifier(col, false)}"`).join(', ');
-    const values = columns.map(col => formatValue(row[col]));
-    
-    const insertQuery = `
-        INSERT INTO "${sanitizedTableName}" (${columnList})
-        VALUES (${values.join(', ')})
-    `;
+async function insertRow(row: Record<string, any>, tableName: string, connection: any): Promise<void> {
+  const columns = Object.keys(row);
+  const columnList = columns.map(col => `"${sanitizeIdentifier(col, false)}"`).join(', ');
+  const placeholders = columns.map(() => '?').join(', ');
+  
+  const query = `
+      INSERT INTO "${sanitizeIdentifier(tableName, false)}" 
+      (${columnList}) 
+      VALUES (${placeholders})
+  `;
 
-    await new Promise((resolve, reject) => {
-        snowflakeConnection.execute({
-            sqlText: insertQuery,
-            complete: (err: any, stmt: any) => {
-                if (err) {
-                    console.error('Insert error:', err);
-                    console.error('Failed Query:', insertQuery);
-                    reject(err);
-                } else {
-                    resolve(stmt);
-                }
-            }
-        });
-    });
+  const values = columns.map(col => row[col] === undefined ? null : row[col]);
+
+  return new Promise((resolve, reject) => {
+      connection.execute({
+          sqlText: query,
+          binds: values,
+          complete: (err: any, stmt: any) => {
+              if (err) {
+                  console.error('Insert error:', err);
+                  console.error('Failed Query:', query);
+                  reject(err);
+              } else {
+                  resolve(stmt);
+              }
+          }
+      });
+  });
 }
+
+// Process stream in batches
+async function processClickHouseStream(stream: any, snowflakeConnection: any, snowflakeTableName: string) {
+    let rowCount = 0;
+
+    try {
+        for await (const row of stream) {
+            try {
+                await insertRow(row, snowflakeTableName, snowflakeConnection);
+                rowCount++;
+                
+                if (rowCount % 1000 === 0) {
+                    console.log(`Processed ${rowCount} rows`);
+                }
+            } catch (insertError) {
+                console.error('Error inserting row:', row, insertError);
+                throw insertError;
+            }
+        }
+
+        console.log(`Completed processing ${rowCount} total rows`);
+        return rowCount;
+    } catch (error) {
+        console.error('Error processing stream:', error);
+        throw error;
+    }
+}
+
