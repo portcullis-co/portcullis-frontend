@@ -482,4 +482,3 @@ async function processClickHouseStream(stream: any, snowflakeConnection: any, sn
         throw error;
     }
 }
-
