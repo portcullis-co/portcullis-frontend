@@ -141,13 +141,16 @@ function generateSnowflakeCreateTableSQL(
   columns: Array<{ name: string, type: string }>,
   destinationType: WarehouseDataType
 ): string {
-  // Sanitize table name for Snowflake (uppercase)
   const sanitizedTableName = sanitizeIdentifier(tableName, false);
   
   const columnDefinitions = columns
     .map(column => {
       const sanitizedName = sanitizeIdentifier(column.name, false);
       const snowflakeType = getFinalSnowflakeType(column.type, destinationType);
+      // Convert JSON-like types to OBJECT
+      if (['JSON', 'MAP', 'OBJECT'].includes(column.type.toUpperCase())) {
+        return `"${sanitizedName}" OBJECT`;
+      }
       return `"${sanitizedName}" ${snowflakeType}`;
     })
     .join(', ');
@@ -425,34 +428,34 @@ function formatValue(value: any): string {
   return `'${value}'`;
 }
 
-// Replace streamInsertChunks with single row insert
+// Modify the insert logic to handle VARIANT/OBJECT types
 async function insertRow(row: Record<string, any>, tableName: string, connection: any): Promise<void> {
   const columns = Object.keys(row);
   const columnList = columns.map(col => `"${sanitizeIdentifier(col, false)}"`).join(', ');
-  const placeholders = columns.map(() => '?').join(', ');
   
+  // Use PARSE_JSON for complex types
   const query = `
-      INSERT INTO "${sanitizeIdentifier(tableName, false)}" 
-      (${columnList}) 
-      VALUES (${placeholders})
+    INSERT INTO "${sanitizeIdentifier(tableName, false)}"
+    SELECT ${columns.map(col => `value:${col}`).join(', ')}
+    FROM TABLE(FLATTEN(PARSE_JSON(?)))
   `;
 
-  const values = columns.map(col => row[col] === undefined ? null : row[col]);
+  const values = JSON.stringify([row]);
 
   return new Promise((resolve, reject) => {
-      connection.execute({
-          sqlText: query,
-          binds: values,
-          complete: (err: any, stmt: any) => {
-              if (err) {
-                  console.error('Insert error:', err);
-                  console.error('Failed Query:', query);
-                  reject(err);
-              } else {
-                  resolve(stmt);
-              }
-          }
-      });
+    connection.execute({
+      sqlText: query,
+      binds: [values],
+      complete: (err: any, stmt: any) => {
+        if (err) {
+          console.error('Insert error:', err);
+          console.error('Failed Query:', query);
+          reject(err);
+        } else {
+          resolve(stmt);
+        }
+      }
+    });
   });
 }
 
