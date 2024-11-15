@@ -24,6 +24,8 @@ interface SnowflakeSyncPayload {
   scheduled_at?: string;
 }
 
+interface ColumnTypes extends Map<string, string> {}
+
 // Function to convert value based on warehouse type
 //https://clickhouse.com/docs/en/sql-reference/data-types/data-types-binary-encoding
 function convertValue(value: any, clickhouseType: string): any {
@@ -224,26 +226,21 @@ export const clickhouseToSnowflakeSync = inngest.createFunction(
         // Get table structure
         const describeResult = await clickhouse.query({
             query: `DESCRIBE TABLE "${clickhouseTableName}"`,
-            format: 'JSONCompact'
+            format: 'JSONEachRow'
         });
         
         const columnTypes = new Map<string, string>();
         
-        // Add debug logging
         console.log('Fetching table structure...');
         
         try {
             const result = await describeResult.json();
-            console.log('Raw describe result:', JSON.stringify(result, null, 2));  // Pretty print the result
+            console.log('Raw describe result:', JSON.stringify(result, null, 2));
             
-            if (result && Array.isArray(result.data)) {
-                for (const row of result.data) {
-                    // Assuming the first column is name and second is type based on JSONCompact format
-                    const [name, type] = row;
-                    if (name && type) {
-                        columnTypes.set(name, type);
-                        console.log(`Found column: ${name} (${type})`);
-                    }
+            for (const row of result) {
+                if (row.name && row.type) {
+                    columnTypes.set(row.name, row.type);
+                    console.log(`Found column: ${row.name} (${row.type})`);
                 }
             }
 
@@ -254,7 +251,6 @@ export const clickhouseToSnowflakeSync = inngest.createFunction(
             }
         } catch (error) {
             console.error('Error processing table structure:', error);
-            console.error('Raw response:', await describeResult.text());  // Log raw response
             throw error;
         }
 
@@ -353,7 +349,12 @@ export const clickhouseToSnowflakeSync = inngest.createFunction(
         const stream = resultStream.stream();
 
         try {
-            rowCount = await processClickHouseStream(stream, snowflakeConnection, snowflakeTableName);
+            rowCount = await processClickHouseStream(
+                stream, 
+                snowflakeConnection, 
+                snowflakeTableName,
+                columnTypes
+            );
 
             console.log(`Completed processing ${rowCount} total rows`);
 
@@ -428,60 +429,113 @@ function formatValue(value: any): string {
   return `'${value}'`;
 }
 
-// Modify the insert logic to handle VARIANT/OBJECT types
-async function insertRow(row: Record<string, any>, tableName: string, connection: any): Promise<void> {
-  const columns = Object.keys(row);
-  const columnList = columns.map(col => `"${sanitizeIdentifier(col, false)}"`).join(', ');
-  
-  // Use PARSE_JSON for complex types
-  const query = `
-    INSERT INTO "${sanitizeIdentifier(tableName, false)}"
-    SELECT ${columns.map(col => `value:${col}`).join(', ')}
-    FROM TABLE(FLATTEN(PARSE_JSON(?)))
-  `;
-
-  const values = JSON.stringify([row]);
-
-  return new Promise((resolve, reject) => {
-    connection.execute({
-      sqlText: query,
-      binds: [values],
-      complete: (err: any, stmt: any) => {
-        if (err) {
-          console.error('Insert error:', err);
-          console.error('Failed Query:', query);
-          reject(err);
-        } else {
-          resolve(stmt);
-        }
+function formatValuesList(data: Array<Array<any>>): string {
+  const formattedValues = data.map(row => {
+    const formattedRow = row.map(value => {
+      if (value === null || value === undefined) {
+        return 'NULL'; // Handle null/undefined values
       }
+      if (typeof value === 'string') {
+        return `'${value.replace(/'/g, "''")}'`; // Escape single quotes in strings
+      }
+      if (typeof value === 'number') {
+        return value; // Numbers are added directly
+      }
+      if (typeof value === 'object') {
+        // Convert complex objects or JSON to string
+        return `PARSE_JSON('${JSON.stringify(value).replace(/'/g, "''")}')`;
+      }
+      return `'${value}'`; // Default fallback for other types
     });
+    return `(${formattedRow.join(', ')})`;
   });
+
+  return formattedValues.join(',\n');
+}
+// Modify the insert logic to handle VARIANT/OBJECT types
+async function insertRow(row: Record<string, any>, tableName: string, connection: any, columnTypes: ColumnTypes): Promise<void> {
+    try {
+        // Parse the row data
+        const rowData = JSON.parse(row[0].text);
+        console.log('Parsed Row Data:', rowData);
+
+        // Get column names from the parsed row data
+        const columnNames = Object.keys(rowData);
+        const valuesList = row.map((row: any) => {
+          const parsedObject = JSON.parse(row.text);
+          return Object.values(parsedObject);
+      });
+        const columnList = columnNames.map((col: string) => `"${sanitizeIdentifier(col, false)}"`).join(', ');
+        console.log('valuesList:', valuesList)
+        // Create parameterized values list and map the values from rowData
+        const placeholders = formatValuesList(valuesList);
+        console.log('Placeholder:', placeholders)
+        const sqlText = `
+            INSERT INTO "${sanitizeIdentifier(tableName, false)}" 
+            (${columnList}) 
+            VALUES ${placeholders}
+        `;
+
+        console.log('Insert SQL:', sqlText);
+
+        return new Promise((resolve, reject) => {
+            connection.execute({
+                sqlText: sqlText,
+                complete: (err: any, stmt: any) => {
+                    if (err) {
+                        console.error('Insert error:', err);
+                        reject(err);
+                    } else {
+                        resolve(stmt);
+                    }
+                }
+            });
+        });
+    } catch (error) {
+        console.error('Error processing row:', error);
+        console.error('Raw row data:', row);
+        throw error;
+    }
 }
 
 // Process stream in batches
-async function processClickHouseStream(stream: any, snowflakeConnection: any, snowflakeTableName: string) {
+async function processClickHouseStream(
+    stream: any, 
+    snowflakeConnection: any, 
+    snowflakeTableName: string,
+    columnTypes: ColumnTypes
+): Promise<number> {
     let rowCount = 0;
 
     try {
-        for await (const row of stream) {
-            try {
-                await insertRow(row, snowflakeTableName, snowflakeConnection);
-                rowCount++;
-                
-                if (rowCount % 1000 === 0) {
-                    console.log(`Processed ${rowCount} rows`);
+        // Create a promise to process the stream
+        return new Promise<number>((resolve, reject) => {
+            stream.on('data', async (row: any) => {
+                try {
+                    await insertRow(row, snowflakeTableName, snowflakeConnection, columnTypes);
+                    rowCount++;
+                    
+                    if (rowCount % 1000 === 0) {
+                        console.log(`Processed ${rowCount} rows`);
+                    }
+                } catch (error) {
+                    console.error('Error processing row:', error);
+                    reject(error);
                 }
-            } catch (insertError) {
-                console.error('Error inserting row:', row, insertError);
-                throw insertError;
-            }
-        }
+            });
 
-        console.log(`Completed processing ${rowCount} total rows`);
-        return rowCount;
+            stream.on('end', () => {
+                console.log(`Completed processing ${rowCount} total rows`);
+                resolve(rowCount);
+            });
+
+            stream.on('error', (error: Error) => {
+                console.error('Stream error:', error);
+                reject(error);
+            });
+        });
     } catch (error) {
-        console.error('Error processing stream:', error);
+        console.error('Stream processing error:', error);
         throw error;
     }
 }
