@@ -1,24 +1,69 @@
-import { WarehouseDataType, WarehouseMapping } from "./clickhouse.d";
+import { WarehouseDataType, TypeMappings } from "./clickhouse.d";
 
-// Example implementation for Clickhouse to Snowflake
 export const clickhouseToSnowflake: Map<string, string> = new Map([
-    ['Int32', 'INTEGER'],
-    ['Int64', 'INTEGER'],
-    ['Int16', 'SMALLINT'],
-    ['Float32', 'FLOAT'],
-    ['Float64', 'DOUBLE'],
-    ['String', 'VARCHAR'],
-    ['UInt8', 'BOOLEAN'],
-    ['Date', 'DATE'],
-    ['DateTime', 'TIMESTAMP'],
-    ['Decimal', 'DECIMAL'],
+    // Integer types
+    ['UINT8', 'NUMBER(5, 0)'],
+    ['UINT16', 'NUMBER(5, 0)'],
+    ['UINT32', 'NUMBER(10, 0)'],
+    ['INT8', 'NUMBER(5, 0)'],
+    ['INT16', 'SMALLINT'],
+    ['INT32', 'INTEGER'],
+    ['INT64', 'NUMBER(20, 0)'],
+    ['INT128', 'NUMBER(38, 0)'],
+    ['INT256', 'NUMBER(38, 0)'],
+    ['UINT64', 'NUMBER(20, 0)'],
+    ['UINT128', 'NUMBER(38, 0)'],
+    ['UINT256', 'NUMBER(38, 0)'],
+
+    // FLOATING-POINT TYPES
+    ['FLOAT32', 'FLOAT'],
+    ['FLOAT64', 'DOUBLE'],
+
+    // DECIMAL TYPE
+    ['DECIMAL', 'DECIMAL'], // DECIMAL (PRECISION, SCALE) AS NEEDED, DEFAULT HANDLED ELSEWHERE IF NECESSARY
+
+    // STRING TYPES
+    ['STRING', 'VARCHAR'],
+    ['FIXEDSTRING', 'VARCHAR'],
     ['UUID', 'VARCHAR'],
+    ['IPV4', 'VARCHAR'], // SNOWFLAKE LACKS DIRECT IP TYPE SUPPORT
+    ['IPV6', 'VARCHAR'],
+
+    // DATE AND TIME TYPES
+    ['DATE', 'DATE'],
+    ['DATE32', 'DATE'],
+    ['DATETIME', 'TIMESTAMP_NTZ'],
+    ['DATETIME64', 'TIMESTAMP_NTZ'],
+
+    // JSON-LIKE AND SEMI-STRUCTURED DATA TYPES
     ['JSON', 'VARIANT'],
-    ['Array', 'ARRAY'],
-    ['Binary', 'BINARY']
+    ['OBJECT', 'VARIANT'], // DEPRECATED TYPE, BUT MAPPED TO VARIANT FOR SEMI-STRUCTURED DATA
+    ['MAP', 'OBJECT'],
+
+    // ARRAY TYPE
+    ['ARRAY', 'ARRAY'],
+
+    // GEOGRAPHIC AND GEOMETRY TYPES (NO DIRECT SUPPORT IN SNOWFLAKE, USING VARCHAR)
+    ['GEO', 'VARCHAR'],
+    ['POINT', 'VARCHAR'],
+    ['RING', 'VARCHAR'],
+    ['LINESTRING', 'VARCHAR'],
+    ['MULTILINESTRING', 'VARCHAR'],
+    ['POLYGON', 'VARCHAR'],
+
+    // BOOLEAN TYPE (HANDLED IN CLICKHOUSE OFTEN AS UINT8)
+    ['BOOLEAN', 'BOOLEAN'],
+
+    // MISCELLANEOUS
+    ['TUPLE', 'VARCHAR'], // REPRESENTED AS VARCHAR DUE TO LACK OF NATIVE SUPPORT FOR TUPLES
+    ['NOTHING', 'NULL'], // MAPS TO NULL IN SNOWFLAKE
+    ['BINARY', 'BINARY'],
+
+    // DEFAULT FALLBACK TYPE
+    ['DEFAULT', 'VARCHAR']
 ]);
 
-export const clickhouseToBigQuery: Map<string, string> = new Map([
+export const clickhouseToBigQuery: TypeMappings = new Map([
     ['Int32', 'INT64'],
     ['Int64', 'INT64'],
     ['Int16', 'INT64'],
@@ -35,7 +80,7 @@ export const clickhouseToBigQuery: Map<string, string> = new Map([
     ['Binary', 'BYTES']
 ]);
 
-export const clickhouseToRedshift: Map<string, string> = new Map([
+export const clickhouseToRedshift: TypeMappings = new Map([
     ['Int32', 'INTEGER'],
     ['Int64', 'BIGINT'],
     ['Int16', 'SMALLINT'],
@@ -43,7 +88,7 @@ export const clickhouseToRedshift: Map<string, string> = new Map([
     ['Float64', 'DOUBLE PRECISION'],
     ['String', 'VARCHAR'],
     ['UInt8', 'BOOLEAN'],
-    ['Date', 'DATE'],
+    ['Date', 'DATE'], 
     ['DateTime', 'TIMESTAMP'],
     ['Decimal', 'DECIMAL'],
     ['UUID', 'VARCHAR'],
@@ -52,7 +97,7 @@ export const clickhouseToRedshift: Map<string, string> = new Map([
     ['Binary', 'BYTEA']
 ]);
 
-export const clickhouseToDatabricks: Map<string, string> = new Map([
+export const clickhouseToDatabricks: TypeMappings = new Map([
     ['Int32', 'INT'],
     ['Int64', 'BIGINT'],
     ['Int16', 'SMALLINT'],
@@ -69,7 +114,7 @@ export const clickhouseToDatabricks: Map<string, string> = new Map([
     ['Binary', 'BINARY']
 ]);
 
-export const clickhouseToSQL: Map<string, string> = new Map([
+export const clickhouseToSQL: TypeMappings = new Map([
     ['Int32', 'INTEGER'],
     ['Int64', 'BIGINT'],
     ['Int16', 'SMALLINT'],
@@ -86,7 +131,7 @@ export const clickhouseToSQL: Map<string, string> = new Map([
     ['Binary', 'BYTEA']
 ]);
 
-export const clickhouseToKafka: Map<string, string | null> = new Map([
+export const clickhouseToKafka: TypeMappings = new Map<string, string>([
     ['Int32', 'INT32'],
     ['Int64', 'INT64'],
     ['Int16', 'INT16'],
@@ -99,151 +144,13 @@ export const clickhouseToKafka: Map<string, string | null> = new Map([
     ['Decimal', 'DECIMAL'],
     ['UUID', 'STRING'],
     ['JSON', 'STRING'],
-    ['Array', null],
+    ['Array', 'STRING'],
     ['Binary', 'BYTES']
 ]);
 
-const warehouseTypeMapping: Partial<WarehouseMapping> = {
-    [WarehouseDataType.INTEGER]: {
-      redshift: "INTEGER",
-      bigquery: "INT64",
-      snowflake: "INTEGER",
-      databricks: "INT",
-      sql: "INTEGER",
-      clickhouse: "Int32",
-      kafka: "INT32"
-    },
-    [WarehouseDataType.SMALLINT]: {
-      redshift: "SMALLINT", 
-      bigquery: "INT64",
-      snowflake: "SMALLINT",
-      databricks: "SMALLINT",
-      sql: "SMALLINT",
-      clickhouse: "Int16",
-      kafka: "INT16"
-    },
-    [WarehouseDataType.BIGINT]: {
-      redshift: "BIGINT",
-      bigquery: "INT64", 
-      snowflake: "BIGINT",
-      databricks: "BIGINT",
-      sql: "BIGINT",
-      clickhouse: "Int64",
-      kafka: "INT64"
-    },
-    [WarehouseDataType.FLOAT]: {
-      redshift: "FLOAT4",
-      bigquery: "FLOAT64",
-      snowflake: "FLOAT",
-      databricks: "FLOAT",
-      sql: "REAL",
-      clickhouse: "Float32",
-      kafka: "FLOAT"
-    },
-    [WarehouseDataType.DOUBLE]: {
-      redshift: "DOUBLE PRECISION",
-      bigquery: "FLOAT64",
-      snowflake: "DOUBLE",
-      databricks: "DOUBLE",
-      sql: "DOUBLE PRECISION",
-      clickhouse: "Float64",
-      kafka: "DOUBLE"
-    },
-    [WarehouseDataType.VARCHAR]: {
-      redshift: "VARCHAR",
-      bigquery: "STRING",
-      snowflake: "VARCHAR",
-      databricks: "STRING",
-      sql: "VARCHAR",
-      clickhouse: "String",
-      kafka: "STRING"
-    },
-    [WarehouseDataType.BOOLEAN]: {
-      redshift: "BOOLEAN",
-      bigquery: "BOOL",
-      snowflake: "BOOLEAN",
-      databricks: "BOOLEAN",
-      sql: "BOOLEAN",
-      clickhouse: "UInt8",
-      kafka: "BOOLEAN"
-    },
-    [WarehouseDataType.DATE]: {
-      redshift: "DATE",
-      bigquery: "DATE",
-      snowflake: "DATE", 
-      databricks: "DATE",
-      sql: "DATE",
-      clickhouse: "Date",
-      kafka: "DATE"
-    },
-    [WarehouseDataType.TIMESTAMP]: {
-      redshift: "TIMESTAMP",
-      bigquery: "TIMESTAMP",
-      snowflake: "TIMESTAMP",
-      databricks: "TIMESTAMP",
-      sql: "TIMESTAMP",
-      clickhouse: "DateTime",
-      kafka: "TIMESTAMP"
-    },
-    [WarehouseDataType.DECIMAL]: {
-      redshift: "DECIMAL",
-      bigquery: "NUMERIC",
-      snowflake: "DECIMAL",
-      databricks: "DECIMAL",
-      sql: "DECIMAL",
-      clickhouse: "Decimal64",
-      kafka: "DECIMAL"
-    },
-    [WarehouseDataType.UUID]: {
-      redshift: "VARCHAR",
-      bigquery: "STRING",
-      snowflake: "UUID",
-      databricks: "STRING",
-      sql: "UUID",
-      clickhouse: "UUID",
-      kafka: "STRING"
-    },
-    [WarehouseDataType.JSON]: {
-      redshift: "SUPER",
-      bigquery: "JSON",
-      snowflake: "VARIANT",
-      databricks: "STRING",
-      sql: "JSONB",
-      clickhouse: "JSON",
-      kafka: "STRING"
-    },
-    [WarehouseDataType.ARRAY]: {
-      redshift: "SUPER",
-      bigquery: "ARRAY",
-      snowflake: "ARRAY",
-      databricks: "ARRAY",
-      sql: "ARRAY",
-      clickhouse: "Array",
-      kafka: "STRING"
-    },
-    [WarehouseDataType.BINARY]: {
-      redshift: "BYTEA", 
-      bigquery: "BYTES",
-      snowflake: "BINARY",
-      databricks: "BINARY",
-      sql: "BYTEA",
-      clickhouse: "String",
-      kafka: "BYTES"
-    },
-    [WarehouseDataType.GEOGRAPHY]: {
-      redshift: undefined,
-      bigquery: "GEOGRAPHY", 
-      snowflake: "GEOGRAPHY",
-      databricks: undefined,
-      sql: undefined,
-      clickhouse: "GEOMETRIC",
-      kafka: undefined
-    }
-  };
-
-export const typeMatrix: Map<WarehouseDataType, Map<string, string | null>> = new Map([
+export const typeMatrix = new Map([
     [WarehouseDataType.Snowflake, clickhouseToSnowflake],
-    [WarehouseDataType.BigQuery, clickhouseToBigQuery], 
+    [WarehouseDataType.BigQuery, clickhouseToBigQuery],
     [WarehouseDataType.Redshift, clickhouseToRedshift],
     [WarehouseDataType.Databricks, clickhouseToDatabricks],
     [WarehouseDataType.Kafka, clickhouseToKafka]

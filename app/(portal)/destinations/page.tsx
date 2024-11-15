@@ -11,7 +11,7 @@ import { Toaster } from "@/components/ui/toaster"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@clerk/nextjs"
 import crypto from 'crypto';
-import { ClickhouseCredentials, SnowflakeCredentials, BigQueryCredentials, RedshiftCredentials, AzureSynapseCredentials, CredentialsFor, TypeMappings, clickhouseToSnowflake, clickhouseToBigQuery, typeMatrix  } from '@/lib/common/types/clickhouse';
+import { ClickhouseCredentials, SnowflakeCredentials, BigQueryCredentials, TypeMatrix  } from '@/lib/common/types/clickhouse.d';
 
 enum WarehouseType {
   Clickhouse = "Clickhouse",

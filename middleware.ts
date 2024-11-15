@@ -14,6 +14,11 @@ const isPublicRoute = createRouteMatcher([
   '/syncs/(.*)',
   '/terms',
   '/api/(.*)',
+  '/api/inngest(.*)',
+  '/.redwood/functions/inngest(.*)',
+  '/x/inngest(.*)',
+  '/.netlify/functions/inngest(.*)',
+  '/inngest(.*)'
 ]);
 
 const allowedRoutes = [

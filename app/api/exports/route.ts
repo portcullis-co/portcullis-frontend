@@ -3,14 +3,19 @@ import { createClient } from '@/lib/supabase/server';
 import { auth } from '@clerk/nextjs/server';
 import { validateApiKey } from '@/lib/validateApiKey';
 import { encrypt, decrypt } from '@/lib/encryption';
-import type { ClickhouseCredentials } from '@/lib/common/types/clickhouse.d';
-import type { clickhouseToSnowflakeSync } from "@/app/trigger/trigger-export";
-import { tasks } from "@trigger.dev/sdk/v3";
-import Analytics from '@segment/analytics-node';
+import type { ClickhouseCredentials, WarehouseDataType } from '@/lib/common/types/clickhouse.d';
+import { serve } from "inngest/next";
+import { clickhouseToSnowflakeSync } from "@/app/inngest/functions/clickhouseToSnowflakeSync"; // Create this file
+import { inngest } from "@/app/inngest/client";
+import { ExportComponentProps } from '@runportcullis/portcullis-react';
+import { buildClickHouseQuery } from "@/lib/queryBuilder";
+
 
 const allowedOrigins = [
   'http://localhost:3000',
   'https://portcullis-app.fly.dev',
+  'https://portcullis-app.fly.dev/api/exports',
+  'https://app.inngest.com/'
 ];
 
 function corsHeaders(origin: string | null) {
@@ -39,18 +44,17 @@ export async function OPTIONS(request: Request) {
 export async function POST(request: Request) {
   const origin = request.headers.get('origin');
   const headers = corsHeaders(origin);
-  
+
   try {
     // Log all headers for debugging
     console.log('Request headers:', Object.fromEntries(request.headers.entries()));
-    
+
     const supabase = createClient();
     const apiKey = request.headers.get('x-api-key');
     console.log('Received API Key:', apiKey); // Be careful not to log actual keys in production
-    
+
     const body = await request.json();
-    console.log('Request body:', body);
-    
+
     // Validate API key if present
     if (apiKey) {
       const { isValid, organizationId } = await validateApiKey(apiKey);
@@ -69,22 +73,38 @@ export async function POST(request: Request) {
       body.organization = orgId;
     }
 
-    const { 
+    const {
       internal_warehouse,
       internal_credentials,
       destination_type,
-      tenancy_column,
-      tenant_id,
       destination_name,
+      tenancy_column,
+      tenancy_id,
       table,
       credentials,
-      scheduled_at 
+      scheduled_at
     } = body;
+
+    // Extract `tenancyColumn` and `tenancyIdentifier` from the request body
+    console.log('Request body:', body);
+    console.log('Tenancy Column:', tenancy_column); // Debug log
+    console.log('Tenancy Identifier:', tenancy_id); // Debug log
+
+    // Build the query using `buildQuery` function with sanitized identifiers
+    const { query, params } = buildClickHouseQuery({
+        table: table,
+        conditions: body.tenancy_column && body.tenancy_id ? { [body.tenancy_column]: body.tenancy_id } : {},
+        columns: ['*'],
+    });
+
+    // Log the constructed query for debugging
+    console.log('Constructed Query:', query);
+    console.log('Query Parameters:', params);
 
     // Validate required fields
     if (!internal_warehouse || !destination_type || !destination_name || !table || !credentials || !internal_credentials) {
-      return NextResponse.json({ 
-        error: 'Missing required fields' 
+      return NextResponse.json({
+        error: 'Missing required fields'
       }, { status: 400 });
     }
 
@@ -111,12 +131,28 @@ export async function POST(request: Request) {
       try {
         console.log('Fetching warehouse with ID:', internal_warehouse);
 
-        // Decrypt the internal warehouse credentials
-        const decryptedCredentials = await decrypt(internal_credentials);
+        // First fetch the warehouse credentials from Supabase
+        const { data: warehouseData, error: warehouseError } = await supabase
+          .from('warehouses')
+          .select('internal_credentials, id')
+          .eq('id', internal_warehouse)
+          .single();
+          
+        if (warehouseError || !warehouseData) {
+          throw new Error(`Failed to fetch warehouse credentials: ${warehouseError?.message || 'No data found'}`);
+        }
 
-        // Add error handling for client initialization
-        if (!process.env.TRIGGER_SECRET_KEY) {
-          throw new Error('TRIGGER_SECRET_KEY environment variable is not set');
+        // Log the raw internal_credentials for debugging
+        console.log('Raw internal_credentials:', warehouseData.internal_credentials);
+
+        // Decrypt the internal warehouse credentials
+        let decryptedCredentials;
+        try {
+          decryptedCredentials = await decrypt(warehouseData.internal_credentials);
+          console.log('Decrypted credentials:', decryptedCredentials);
+        } catch (decryptError) {
+          console.error('Decryption error:', decryptError);
+          throw new Error('Failed to decrypt credentials');
         }
 
         const payload = {
@@ -124,27 +160,57 @@ export async function POST(request: Request) {
           internal_credentials: decryptedCredentials,
           destination_credentials: credentials,
           organization: body.organization,
-          query: `SELECT * FROM ${table} WHERE ${tenancy_column} = '${tenant_id}'`,
-          destination_type: destination_type,
+          tenancy_column: body.tenancy_column,
+          tenancy_id: body.tenancy_id,
+          query: query,
+          destination_type: destination_type as WarehouseDataType,
           table: table,
           scheduled_at: scheduled_at
-        }
-        switch (destination_type) {
-          case "snowflake":
-            await tasks.trigger<typeof clickhouseToSnowflakeSync>(
-              "clickhouse-snowflake-sync",
-              payload
-            );
-            console.log("Successfully scheduled Snowflake export task");
-            break;
-          // Add other cases here as needed
-          default:
-            throw new Error(`Unsupported destination type: ${destination_type}`);
+        };
+
+        // Validate credentials before sending
+        if (destination_type === 'snowflake') {
+          if (!credentials.account || !credentials.username || !credentials.password) {
+            throw new Error('Invalid Snowflake credentials');
+          }
+
+          // Clean up account URL and create new credentials object
+          const cleanedCredentials = {
+            ...credentials,
+            account: credentials.account.replace(/\.snowflakecomputing\.com$/, '')
+          };
+
+          payload.destination_credentials = cleanedCredentials;
         }
 
+        console.log('Inngest Event Key present:', !!process.env.INNGEST_EVENT_KEY);
+
+        // Send event to trigger Inngest function
+        switch (destination_type) {
+          case 'snowflake':
+            await inngest.send({
+              name: "event/clickhouse-to-snowflake-sync",
+              data: payload,
+            });
+            break;
+          case 'bigquery':
+            await inngest.send({
+              name: "event/clickhouse-to-bigquery-sync",
+              data: payload,
+            });
+            break;
+          case 'redshift':
+            await inngest.send({
+              name: "event/clickhouse-to-redshift-sync",
+              data: payload,
+            });
+            break;
+        }
+
+        console.log("Successfully scheduled export task");
       } catch (error) {
         console.error('Trigger event error:', error);
-        return NextResponse.json({ 
+        return NextResponse.json({
           error: 'Failed to schedule export task',
           details: error instanceof Error ? error.message : 'Unknown error'
         }, { status: 500, headers });
@@ -157,14 +223,15 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error('POST endpoint error:', error);
-    return NextResponse.json({ 
+    return NextResponse.json({
       error: error instanceof Error ? error.message : 'An unexpected error occurred'
-    }, { 
+    }, {
       status: 500,
       headers,
     });
   }
 }
+
 
 export async function GET(request: Request) {
   const origin = request.headers.get('origin');

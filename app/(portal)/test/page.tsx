@@ -1,7 +1,7 @@
 'use client';
 
 import { useOrganization } from '@clerk/nextjs';
-import { ExportWrapper } from '@runportcullis/portcullis-react';
+import { ExportComponent } from '@runportcullis/portcullis-react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useEffect, useState } from 'react';
 
@@ -9,6 +9,7 @@ export default function SDKTestPage() {
   const { organization, isLoaded } = useOrganization();
   const apiKey = process.env.NEXT_PUBLIC_PORTCULLIS_API_KEY;
   const [mounted, setMounted] = useState(false);
+  const orgId = useOrganization().organization?.id
 
   useEffect(() => {
     setMounted(true);
@@ -40,11 +41,13 @@ export default function SDKTestPage() {
         </CardHeader>
         <CardContent>
           {organization ? (
-            <ExportWrapper 
+            <ExportComponent 
               apiKey={apiKey}
               organizationId={organization.id}
-              internalWarehouse="34b9bd83-9439-4677-9d0f-e2c6d817e1d1"
-              tableName='test_table'
+              internalWarehouse="7ffa2831-5dec-4de2-ad86-9735ea5e4dbf"
+              tableName='dummy_data_micro'
+              tenancyColumn="org_id"
+              tenancyIdentifier="org_5131c56fa5ff41df97cc1b1c890"
             />
           ) : (
             <p className="text-yellow-600">
