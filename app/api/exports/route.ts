@@ -176,6 +176,13 @@ export async function POST(request: Request) {
           payload.destination_credentials = cleanedCredentials;
         }
 
+        if (destination_type === 'bigquery') {
+          // Check for required fields in BigQuery credentials
+          if (!credentials.client_email || !credentials.private_key) {
+            throw new Error('Invalid BigQuery credentials: Missing client_email or private_key');
+          }
+        }
+
         console.log('Inngest Event Key present:', !!process.env.INNGEST_EVENT_KEY);
 
         // Send event to trigger Inngest function
