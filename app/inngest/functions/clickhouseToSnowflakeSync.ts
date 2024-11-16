@@ -2,14 +2,13 @@ import { inngest } from "../client";
 import { decrypt } from "@/lib/encryption";
 import { createClient as createClickhouseClient } from '@clickhouse/client';
 import Snowflake from 'snowflake-sdk';
-import { Analytics } from '@segment/analytics-node';
 import { Connection } from "snowflake-sdk";
 import { TypeMappings, WarehouseDataType, ClickhouseCredentials, SnowflakeCredentials } from "@/lib/common/types/clickhouse.d";
 import { clickhouseToSnowflake, typeMatrix } from "@/lib/common/types/clickhouse";
 import { json } from "stream/consumers";
 import { error } from "console";
 import { sanitizeIdentifier } from "@/lib/queryBuilder";
-
+import { createClient } from '@/lib/supabase/server';
 // Add type definition
 interface SnowflakeSyncPayload {
   internal_credentials: string | ClickhouseCredentials;
@@ -19,6 +18,7 @@ interface SnowflakeSyncPayload {
   table: string;
   organization: string;
   internal_warehouse: string;
+  destination_name: string;
   tenancy_column?: string;
   tenancy_id?: string;
   scheduled_at?: string;
@@ -401,7 +401,7 @@ export const clickhouseToSnowflakeSync = inngest.createFunction(
             console.error('Error closing ClickHouse connection:', closeError);
           }
         }
-        
+
         if (snowflakeConnection) {
           await new Promise<void>((resolve) => {
             snowflakeConnection.destroy((err: Error | undefined) => {
@@ -497,7 +497,6 @@ async function insertRow(row: Record<string, any>, tableName: string, connection
         throw error;
     }
 }
-
 // Process stream in batches
 async function processClickHouseStream(
     stream: any, 
@@ -510,13 +509,58 @@ async function processClickHouseStream(
     try {
         // Create a promise to process the stream
         return new Promise<number>((resolve, reject) => {
-            stream.on('data', async (row: any) => {
+            stream.on('data', async (row: any, event: any) => {
                 try {
                     await insertRow(row, snowflakeTableName, snowflakeConnection, columnTypes);
                     rowCount++;
                     
                     if (rowCount % 1000 === 0) {
                         console.log(`Processed ${rowCount} rows`);
+                        const payload = event.data as SnowflakeSyncPayload;
+                          const supabase = createClient();
+                          const { data: warehouseData } = await supabase
+                            .from('organizations')
+                            .select('id, hyperline_id')
+                            .eq('id', payload.organization)
+                            .single();
+                
+                          // Ensure warehouseData is available before proceeding
+                            const trackExport = {
+                              method: 'POST',
+                              headers: {
+                                Authorization: 'Bearer prod_dc5eb5c34597149afc3379aee12f79437d6ed5b7b4a42d729497ecbcdbccb3ce',
+                                'Content-Type': 'application/json'
+                              },
+                              body: JSON.stringify({
+                                customer_id: warehouseData?.hyperline_id,
+                                event_type: "flexport",
+                                timestamp: new Date().toISOString(), // Use current timestamp
+                                record: {
+                                  id: `D32NAA8-${warehouseData?.id}`, // Dynamic ID based on warehouseData
+                                  durationInMs: 32, // Replace with actual duration if available
+                                  isVerified: true // Set based on your logic
+                                }
+                              })
+                            };
+                
+                            fetch('https://ingest.hyperline.co/v1/events', trackExport)
+                              .then(response => response.json())
+                              .then(response => console.log(response))
+                              .catch(err => console.error(err));
+                
+                              const { data, error } = await supabase
+                              .from('exports')
+                              .insert({
+                                organization: payload.organization,
+                                internal_warehouse: payload.internal_warehouse,
+                                destination_type: payload.destination_type,
+                                destination_name: payload.destination_name,
+                                table: payload.table,
+                                scheduled_at: payload.scheduled_at
+                              })
+                              .select()
+                              .single();
+                                          
                     }
                 } catch (error) {
                     console.error('Error processing row:', error);

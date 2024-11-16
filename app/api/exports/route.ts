@@ -110,16 +110,8 @@ export async function POST(request: Request) {
 
     const { data, error } = await supabase
       .from('exports')
-      .insert({
-        organization: body.organization,
-        internal_warehouse: internal_warehouse,
-        destination_type: destination_type,
-        destination_name: destination_name,
-        table: table,
-        scheduled_at: scheduled_at
-      })
-      .select()
-      .single();
+      .select('*')
+      .eq('organization', body.organization);
 
     if (error) {
       console.error('Supabase error:', error);
@@ -164,6 +156,7 @@ export async function POST(request: Request) {
           tenancy_id: body.tenancy_id,
           query: query,
           destination_type: destination_type as WarehouseDataType,
+          destination_name: destination_name,
           table: table,
           scheduled_at: scheduled_at
         };

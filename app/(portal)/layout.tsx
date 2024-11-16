@@ -16,7 +16,6 @@ export default function Layout({ children }: LayoutProps) {
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header />
         <main className="flex-1 overflow-x-hidden overflow-y-auto bg-white p-4 md:p-6">
-          <h1 className="text-2xl md:text-3xl font-semibold text-black mb-4 md:mb-6">Dashboard</h1>
           {children}
         </main>
       </div>
