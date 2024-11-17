@@ -139,34 +139,77 @@ export const clickhouseToBigQuerySync = inngest.createFunction(
     
     return await step.run("sync-data", async () => {
       try {
-        // Parse credentials
+        // Parse and validate internal credentials
         let internal_credentials: ClickhouseCredentials;
-        if (typeof payload.internal_credentials === 'string') {
-          internal_credentials = JSON.parse(payload.internal_credentials) as ClickhouseCredentials;
-        } else {
-          throw new Error('Invalid internal_credentials format');
+        try {
+          internal_credentials = typeof payload.internal_credentials === 'string' 
+            ? JSON.parse(payload.internal_credentials) 
+            : payload.internal_credentials;
+            
+          if (!internal_credentials?.host || !internal_credentials?.username || 
+              !internal_credentials?.password || !internal_credentials?.database) {
+            throw new Error('Invalid internal credentials structure');
+          }
+        } catch (e: any) {
+          throw new Error(`Failed to parse internal credentials: ${e.message}`);
         }
 
-        // Connect to ClickHouse
-        clickhouse = createClickhouseClient({
-          url: internal_credentials.host,
-          username: internal_credentials.username,
-          password: internal_credentials.password,
-          database: internal_credentials.database,
-        });
+        // Validate destination credentials
+        if (!payload.destination_credentials) {
+          throw new Error('Destination credentials are missing');
+        }
 
-        // Test ClickHouse connection
-        await clickhouse.ping();
+        const { project_id, client_email, private_key } = payload.destination_credentials;
 
-        // Initialize BigQuery client
-        bigquery = new BigQuery({
-          projectId: payload.destination_credentials.project_id,
-          credentials: {
-            client_email: payload.destination_credentials.client_email?.trim(),
-            private_key: payload.destination_credentials.private_key.replace(/\\n/g, '\n'),
+        if (!project_id || !client_email || !private_key) {
+          throw new Error('Missing required BigQuery credentials: ' + 
+            [
+              !project_id && 'project_id',
+              !client_email && 'client_email',
+              !private_key && 'private_key'
+            ].filter(Boolean).join(', '));
+        }
+
+        // Format private key with proper validation
+        let formattedPrivateKey: string;
+        try {
+          formattedPrivateKey = private_key
+            ? private_key.toString().replace(/\\n/g, '\n').replace(/\n\s+/g, '\n')
+            : '';
+            
+          if (!formattedPrivateKey) {
+            throw new Error('Private key is empty after formatting');
           }
-        });
+        } catch (e: any) {
+          throw new Error(`Failed to format private key: ${e.message}`);
+        }
 
+        // Connect to ClickHouse with error handling
+        try {
+          clickhouse = createClickhouseClient({
+            url: internal_credentials.host,
+            username: internal_credentials.username,
+            password: internal_credentials.password,
+            database: internal_credentials.database,
+          });
+
+          await clickhouse.ping();
+        } catch (e: any) {
+          throw new Error(`Failed to connect to ClickHouse: ${e.message}`);
+        }
+
+        // Initialize BigQuery client with error handling
+        try {
+          bigquery = new BigQuery({
+            projectId: project_id,
+            credentials: {
+              client_email: client_email.trim(),
+              private_key: formattedPrivateKey,
+            }
+          });
+        } catch (e: any) {
+          throw new Error(`Failed to initialize BigQuery client: ${e.message}`);
+        }
         // Extract and sanitize table names
         const tableMatch = payload.query.match(/FROM\s+([^\s;]+)/i);
         if (!tableMatch) {
