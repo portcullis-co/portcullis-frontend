@@ -8,9 +8,9 @@ import { TypeMappings, WarehouseDataType, ClickhouseCredentials, SnowflakeCreden
 
 // Add type definitions
 interface BigQueryCredentials {
-  projectId: string;
-  clientEmail: string;
-  privateKey: string;
+  project_id: string;
+  client_email: string;
+  private_key: string;
   dataset: string;
 }
 
@@ -160,10 +160,10 @@ export const clickhouseToBigQuerySync = inngest.createFunction(
 
         // Initialize BigQuery client
         bigquery = new BigQuery({
-          projectId: payload.destination_credentials.projectId,
+          projectId: payload.destination_credentials.project_id,
           credentials: {
-            client_email: payload.destination_credentials.clientEmail,
-            private_key: payload.destination_credentials.privateKey,
+            client_email: payload.destination_credentials.client_email?.trim(),
+            private_key: payload.destination_credentials.private_key.replace(/\\n/g, '\n'),
           }
         });
 

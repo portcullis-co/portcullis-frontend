@@ -87,8 +87,7 @@ export async function POST(request: Request) {
 
     // Extract `tenancyColumn` and `tenancyIdentifier` from the request body
     console.log('Request body:', body);
-    console.log('Tenancy Column:', tenancy_column); // Debug log
-    console.log('Tenancy Identifier:', tenancy_id); // Debug log
+    console.log('Credentials:', body.credentials)
 
     // Build the query using `buildQuery` function with sanitized identifiers
     const { query, params } = buildClickHouseQuery({
@@ -166,6 +165,12 @@ export async function POST(request: Request) {
           if (!credentials.account || !credentials.username || !credentials.password) {
             throw new Error('Invalid Snowflake credentials');
           }
+        }
+
+        if (destination_type === 'bigquery') {
+          if (!credentials.client_email || !credentials.private_key || !credentials.project_id) {
+            throw new Error('Invalid Bigquery credentials');
+          }
 
           // Clean up account URL and create new credentials object
           const cleanedCredentials = {
@@ -174,13 +179,6 @@ export async function POST(request: Request) {
           };
 
           payload.destination_credentials = cleanedCredentials;
-        }
-
-        if (destination_type === 'bigquery') {
-          // Check for required fields in BigQuery credentials
-          if (!credentials.client_email || !credentials.private_key) {
-            throw new Error('Invalid BigQuery credentials: Missing client_email or private_key');
-          }
         }
 
         console.log('Inngest Event Key present:', !!process.env.INNGEST_EVENT_KEY);
