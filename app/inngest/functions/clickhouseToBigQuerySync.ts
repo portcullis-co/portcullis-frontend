@@ -1,12 +1,17 @@
 import { inngest } from "../client";
 import { decrypt } from "@/lib/encryption";
 import { createClient as createClickhouseClient } from '@clickhouse/client';
-import { BigQuery } from '@google-cloud/bigquery';
+import Snowflake from 'snowflake-sdk';
+import { Connection } from "snowflake-sdk";
+import { TypeMappings, WarehouseDataType, ClickhouseCredentials, BigQueryCredentials } from "@/lib/common/types/clickhouse.d";
+import { clickhouseToBigQuery, typeMatrix } from "@/lib/common/types/clickhouse";
+import { json } from "stream/consumers";
+import { error } from "console";
 import { sanitizeIdentifier } from "@/lib/queryBuilder";
 import { createClient } from '@/lib/supabase/server';
-import { TypeMappings, WarehouseDataType, ClickhouseCredentials, BigQueryCredentials } from "@/lib/common/types/clickhouse.d";
-
-interface ClickhouseToBigQueryPayload {
+import { BigQuery } from '@google-cloud/bigquery'
+// Add type definition
+interface SnowflakeSyncPayload {
   internal_credentials: string | ClickhouseCredentials;
   destination_credentials: BigQueryCredentials;
   destination_type: WarehouseDataType;
@@ -22,296 +27,560 @@ interface ClickhouseToBigQueryPayload {
 
 interface ColumnTypes extends Map<string, string> {}
 
-// BigQuery type mapping
-const clickhouseToBigQuery = new Map<string, string>([
-  ['String', 'STRING'],
-  ['FixedString', 'STRING'],
-  ['UUID', 'STRING'],
-  ['Date', 'DATE'],
-  ['Date32', 'DATE'],
-  ['DateTime', 'TIMESTAMP'],
-  ['DateTime64', 'TIMESTAMP'],
-  ['Int8', 'INT64'],
-  ['Int16', 'INT64'],
-  ['Int32', 'INT64'],
-  ['Int64', 'INT64'],
-  ['Int128', 'NUMERIC'],
-  ['Int256', 'NUMERIC'],
-  ['UInt8', 'INT64'],
-  ['UInt16', 'INT64'],
-  ['UInt32', 'INT64'],
-  ['UInt64', 'INT64'],
-  ['UInt128', 'NUMERIC'],
-  ['UInt256', 'NUMERIC'],
-  ['Float32', 'FLOAT64'],
-  ['Float64', 'FLOAT64'],
-  ['Decimal', 'NUMERIC'],
-  ['Boolean', 'BOOLEAN'],
-  ['Array', 'ARRAY'],
-  ['JSON', 'JSON'],
-  ['Map', 'JSON'],
-  ['Tuple', 'STRING'],
-  ['IPv4', 'STRING'],
-  ['IPv6', 'STRING'],
-  ['DEFAULT', 'STRING']
-]);
-
-// Function to convert value based on BigQuery type
+// Function to convert value based on warehouse type
+//https://clickhouse.com/docs/en/sql-reference/data-types/data-types-binary-encoding
 function convertValue(value: any, clickhouseType: string): any {
+  // console.log('Fuck Malvious');
   if (!clickhouseType) {
     console.error('Received undefined or null ClickHouse type.');
-    return null;
+    return 'thisisanerrormessage_001';
+}
+  if (!clickhouseType) {
+    console.warn(`Invalid ClickHouse type: ${clickhouseType}. Returning value as is.`);
+    return value;  // Return the value as is if type is missing or invalid
   }
 
-  const bigQueryType = clickhouseToBigQuery.get(clickhouseType.toUpperCase()) || 'STRING';
+  const preProcessed = clickhouseToBigQuery.get(clickhouseType)?.toUpperCase() || 'STRING'; // Default to 'STRING' if type is invalid
+  const processedType = preProcessed.startsWith('DECIMAL') ? preProcessed.slice(6) : preProcessed;
 
-  switch (bigQueryType) {
+  switch (processedType) {
     case 'STRING':
+    case 'FIXEDSTRING':
+    case 'VARCHAR': 
       return String(value);
 
+    case 'UINT8':
+    case 'UINT16':
+    case 'UINT32':
+    case 'INT8':
+    case 'INT16':
+    case 'INT32':
+    case 'INTEGER':  
+      return Number(value);
+
     case 'INT64':
-      return Number(value);
+    case 'INT128':
+    case 'INT256':
+    case 'UINT64':
+    case 'UINT128':
+    case 'UINT256': 
+      return BigInt(value);
 
-    case 'NUMERIC':
-      return value.toString(); // BigQuery handles numeric strings
-
+    case 'FLOAT32':
     case 'FLOAT64':
-      return Number(value);
+    case 'FLOAT':
+    case 'DOUBLE': 
+    case 'DECIMAL': 
+      return parseFloat(value);
 
     case 'BOOLEAN':
       return Boolean(value);
 
     case 'DATE':
-      return value ? new Date(value).toISOString().split('T')[0] : null;
+    case 'DATE32':
+    case 'DATETIME':
+    case 'DATETIME64':
+      return new Date(value); // Assuming value is in a valid format
 
-    case 'TIMESTAMP':
-      return value ? new Date(value).toISOString() : null;
+    case 'UUID':
+      return String(value); // UUIDs are typically strings
 
-    case 'JSON':
-      return typeof value === 'string' ? value : JSON.stringify(value);
+    case 'JSON':  
+    case 'MAP':
+    case 'OBJECT': // Deprecated
+      return JSON.parse(value);
 
     case 'ARRAY':
-      return Array.isArray(value) ? value : JSON.parse(value);
+      return Array.isArray(value) ? value : JSON.parse(value); // Handle array conversion
+
+    case 'TUPLE': 
+      return String(value);
+
+    case 'IPV6':
+    case 'IPV4':
+      return String(value);
+
+    case 'GEO':
+    case 'POINT':
+    case 'RING':
+    case 'LINESTRING':
+    case 'MULTILINESTRING':
+    case 'POLYGON':
+      return String(value);
+
+    case 'NOTHING':
+      return null;
 
     default:
-      return String(value);
+      return value;  // Fallback to the original value for unsupported types
   }
 }
 
-function getFinalBigQueryType(clickhouseType: string): string {
+
+function getFinalSnowflakeType(clickhouseType: string, destinationType: WarehouseDataType): string {
   if (!clickhouseType) {
-    console.warn('ClickHouse type is undefined or null, defaulting to STRING');
-    return 'STRING';
+    console.warn('ClickHouse type is undefined or null, defaulting to VARCHAR');
+    return 'VARCHAR';  // Default fallback instead of throwing error
   }
 
+  // Step 1: Get base Snowflake type
   const type = String(clickhouseType).trim().toUpperCase();
-  return clickhouseToBigQuery.get(type) || 'STRING';
+  const processedType = type.startsWith('DECIMAL') ? type.slice(6) : type
+  const baseType = clickhouseToBigQuery.get(processedType.toUpperCase()) || clickhouseToBigQuery.get('DEFAULT')!;
+
+  // Step 2: Convert to specific warehouse type if needed
+  // TODO Handle Decimal types specially
+  //do some logic here grabbing the type const and porting across scale and precision
+  /*
+  https://clickhouse.com/docs/en/sql-reference/data-types/decimal
+  https://docs.snowflake.com/en/sql-reference/data-types-numeric
+  */
+  return baseType || 'VARCHAR';
 }
 
-function generateBigQuerySchema(columns: Array<{ name: string, type: string }>) {
-  return columns.map(column => ({
-    name: sanitizeIdentifier(column.name, false),
-    type: getFinalBigQueryType(column.type),
-    mode: 'NULLABLE'
-  }));
+
+function generateBigQueryCreateTableSQL(
+  tableName: string,
+  columns: Array<{ name: string, type: string }>,
+  destinationType: WarehouseDataType
+): string {
+  const sanitizedTableName = sanitizeIdentifier(tableName, false);
+  
+  const columnDefinitions = columns
+    .map(column => {
+      const sanitizedName = sanitizeIdentifier(column.name, false);
+      const snowflakeType = getFinalSnowflakeType(column.type, destinationType);
+      // Convert JSON-like types to OBJECT
+      if (['JSON', 'MAP', 'OBJECT'].includes(column.type.toUpperCase())) {
+        return `"${sanitizedName}" OBJECT`;
+      }
+      return `"${sanitizedName}" ${snowflakeType}`;
+    })
+    .join(', ');
+
+  return `CREATE TABLE IF NOT EXISTS "${sanitizedTableName}" (${columnDefinitions})`;
 }
 
-export const clickhouseToBigQuerySync = inngest.createFunction(
-  {
-    id: "clickhouse-bigquery-sync",
-    name: "Clickhouse to BigQuery Sync"
+// Function to convert Clickhouse value to Snowflake-compatible value
+function convertClickhouseValue(value: any, clickhouseType: string, destinationType: WarehouseDataType): any {
+  if (value === null || value === undefined) return null;
+
+  const snowflakeType = getFinalSnowflakeType(clickhouseType, destinationType);
+  if (!clickhouseType) {
+    throw new Error('No Clickhouse type provided');
+  }
+  else {
+    return convertValue(value, snowflakeType);
+  }
+}
+
+// Create function with proper typing
+export const clickhouseToSnowflakeSync = inngest.createFunction(
+  { 
+    id: "clickhouse-snowflake-sync",
+    name: "Clickhouse to Snowflake Sync"
   },
-  {
-    event: "event/clickhouse-to-bigquery-sync"
+  { 
+    event: "event/clickhouse-to-snowflake-sync"
   },
   async ({ event, step }) => {
-    const payload = event.data as ClickhouseToBigQueryPayload;
+    const payload = event.data as SnowflakeSyncPayload;
     let clickhouse: any = null;
-    let bigquery: BigQuery | null = null;
+    let snowflakeConnection: any = null;
+    let batch: any[] = [];
+    const batchSize = 1000;
     
     return await step.run("sync-data", async () => {
       try {
-        // Parse and validate internal credentials
+        // Parse credentials
         let internal_credentials: ClickhouseCredentials;
-        try {
-          internal_credentials = typeof payload.internal_credentials === 'string' 
-            ? JSON.parse(payload.internal_credentials) 
-            : payload.internal_credentials;
-            
-          if (!internal_credentials?.host || !internal_credentials?.username || 
-              !internal_credentials?.password || !internal_credentials?.database) {
-            throw new Error('Invalid internal credentials structure');
-          }
-        } catch (e: any) {
-          throw new Error(`Failed to parse internal credentials: ${e.message}`);
+        if (typeof payload.internal_credentials === 'string') {
+          internal_credentials = JSON.parse(payload.internal_credentials) as ClickhouseCredentials;
+        } else {
+          throw new Error('Invalid internal_credentials format');
         }
-
-        // Validate destination credentials
-        if (!payload.destination_credentials) {
-          throw new Error('Destination credentials are missing');
-        }
-
-        console.log('Destination Credentials:', payload.destination_credentials)
         const { project_id, client_email, private_key } = payload.destination_credentials;
 
-        if (!project_id || !client_email || !private_key) {
-          throw new Error('Missing required BigQuery credentials: ' + 
-            [
-              !project_id && 'project_id',
-              !client_email && 'client_email',
-              !private_key && 'private_key'
-            ].filter(Boolean).join(', '));
-        }
+        // Connect to ClickHouse
+        clickhouse = createClickhouseClient({
+          url: internal_credentials.host,
+          username: internal_credentials.username,
+          password: internal_credentials.password,
+          database: internal_credentials.database,
+        });
 
-        // Format private key with proper validation
-        // Connect to ClickHouse with error handling
-        try {
-          clickhouse = createClickhouseClient({
-            url: internal_credentials.host,
-            username: internal_credentials.username,
-            password: internal_credentials.password,
-            database: internal_credentials.database,
-          });
+        // Test ClickHouse connection
+        await clickhouse.ping();
 
-          await clickhouse.ping();
-        } catch (e: any) {
-          throw new Error(`Failed to connect to ClickHouse: ${e.message}`);
-        }
-
-        // Initialize BigQuery client with error handling
-        try {
-          bigquery = new BigQuery({
-            projectId: project_id,
-            credentials: {
-              client_email: client_email.trim(),
-              private_key: private_key,
-            }
-          });
-        } catch (e: any) {
-          throw new Error(`Failed to initialize BigQuery client: ${e.message}`);
-        }
-        // Extract and sanitize table names
+        // Extract table name from the query
         const tableMatch = payload.query.match(/FROM\s+([^\s;]+)/i);
         if (!tableMatch) {
           throw new Error('Could not extract table name from query');
         }
 
+        // Keep original case for ClickHouse operations
         const originalTableName = tableMatch[1].replace(/[`"]/g, '');
         const clickhouseTableName = sanitizeIdentifier(originalTableName, false);
-        const bigqueryTableName = sanitizeIdentifier(originalTableName, false);
+        // Use uppercase for Snowflake operations
+        const bigQueryTableName = sanitizeIdentifier(originalTableName, false);
+
 
         // Get table structure
         const describeResult = await clickhouse.query({
-          query: `DESCRIBE TABLE "${clickhouseTableName}"`,
-          format: 'JSONEachRow'
+            query: `DESCRIBE TABLE "${clickhouseTableName}"`,
+            format: 'JSONEachRow'
         });
-
+        
         const columnTypes = new Map<string, string>();
-        const result = await describeResult.json();
         
-        for (const row of result) {
-          if (row.name && row.type) {
-            columnTypes.set(row.name, row.type);
-          }
+        console.log('Fetching table structure...');
+        
+        try {
+            const result = await describeResult.json();
+            console.log('Raw describe result:', JSON.stringify(result, null, 2));
+            
+            for (const row of result) {
+                if (row.name && row.type) {
+                    columnTypes.set(row.name, row.type);
+                    console.log(`Found column: ${row.name} (${row.type})`);
+                }
+            }
+
+            console.log('Found columns:', Array.from(columnTypes.entries()));
+
+            if (columnTypes.size === 0) {
+                throw new Error(`No columns found in ClickHouse table: ${clickhouseTableName}`);
+            }
+        } catch (error) {
+            console.error('Error processing table structure:', error);
+            throw error;
         }
 
+        // Verify we have columns before proceeding
         if (columnTypes.size === 0) {
-          throw new Error(`No columns found in ClickHouse table: ${clickhouseTableName}`);
+            console.error('Table structure:', await describeResult.json()); // Debug log
+            throw new Error(`No columns found in ClickHouse table: ${clickhouseTableName}`);
         }
-
-        // Create dataset if it doesn't exist
-        const dataset = bigquery.dataset(payload.destination_credentials.dataset);
-        const [datasetExists] = await dataset.exists();
-        if (!datasetExists) {
-          await dataset.create();
-        }
-
-        // Create table if it doesn't exist
-        const table = dataset.table(bigqueryTableName);
-        const [tableExists] = await table.exists();
-        
-        if (!tableExists) {
-          const schema = generateBigQuerySchema(
-            Array.from(columnTypes.entries()).map(([name, type]) => ({ name, type }))
-          );
-          
-          await table.create({
-            schema: schema,
-            timePartitioning: {
-              type: 'DAY'
+        // Log the collected column types
+        const setupBigQuery = async (payload: any) => {
+            const bigquery = new BigQuery({
+                projectId: payload.destination_credentials.project_id,
+                credentials: {
+                    client_email: payload.destination_credentials.client_email.trim(),
+                private_key: payload.destination_credentials.private_key,
             }
           });
+        try {
+          const dataset = bigquery.dataset(payload.destination_credentials.dataset);
+          const [datasets] = await bigquery.getDatasets();
+          const existingDataset = datasets.find((d) => d.id === dataset.id);
+          if (!existingDataset) {
+            await dataset.create(); // Create the dataset if it doesn't exist
+          }
+        }
+        catch (error) {
+          throw new Error(`Failed to set up BigQuery environment: ${error}`); // Convert error to string
         }
 
-        // Stream data from ClickHouse to BigQuery
-        const resultStream = await clickhouse.query({
-          query: payload.query,
-          format: 'JSONEachRow',
-          clickhouse_settings: {
-            wait_end_of_query: 1,
-          },
-          query_params: {
-            p0: payload.tenancy_id
-          }
-        });
-
-        let rowCount = 0;
-        const stream = resultStream.stream();
-
-        // Process the stream in chunks
-        const processStream = async () => {
-          const rows: any[] = [];
-          
-          return new Promise((resolve, reject) => {
-            stream.on('data', async (row: any) => {
+        
+        await new Promise((resolve, reject) => {
+          bigquery.query(async (err: Error | undefined, conn: Connection) => {
+            if (err) {
+              reject(err);
+            } else {
               try {
-                const parsedRow = JSON.parse(row[0].text);
-                const transformedRow: Record<string, any> = {};
-                
-                for (const [key, value] of Object.entries(parsedRow)) {
-                  const columnType = columnTypes.get(key);
-                  transformedRow[sanitizeIdentifier(key, false)] = convertValue(value, columnType || 'STRING');
-                }
-                
-                rows.push(transformedRow);
-                rowCount++;
+                // Execute statements sequentially
+                await new Promise((r, j) => conn.execute({
+                  sqlText: `CREATE DATABASE IF NOT EXISTS "${payload.destination_credentials.database}"`,
+                  complete: (err: any) => err ? j(err) : r(null)
+                }));
 
-                if (rows.length >= 1000) {
-                  await table.insert(rows);
-                  rows.length = 0;
-                }
+                await new Promise((r, j) => conn.execute({
+                  sqlText: `USE DATABASE "${payload.destination_credentials.database}"`,
+                  complete: (err: any) => err ? j(err) : r(null)
+                }));
+
+                await new Promise((r, j) => conn.execute({
+                  sqlText: `CREATE SCHEMA IF NOT EXISTS "${payload.destination_credentials.schema}"`,
+                  complete: (err: any) => err ? j(err) : r(null)
+                }));
+
+                await new Promise((r, j) => conn.execute({
+                  sqlText: `USE SCHEMA "${payload.destination_credentials.schema}"`,
+                  complete: (err: any) => err ? j(err) : r(null)
+                }));
+
+                resolve(conn);
               } catch (error) {
                 reject(error);
               }
-            });
-
-            stream.on('end', async () => {
-              if (rows.length > 0) {
-                await table.insert(rows);
-              }
-              resolve(rowCount);
-            });
-
-            stream.on('error', (error: Error) => {
-              reject(error);
-            });
+            }
           });
-        };
+        });
 
-        await processStream();
+        // Create table in Snowflake if it doesn't exist
+        const createTableSQL = generateBigQueryCreateTableSQL(
+          bigQueryTableName,
+          Array.from(columnTypes.entries()).map(([name, type]) => ({ name, type })),
+          payload.destination_type
+      );
+        
+        console.log('Generated Snowflake CREATE TABLE SQL:', createTableSQL);
+
+        await new Promise((resolve, reject) => {
+          bigquery.query({
+            query: createTableSQL,
+        });
+
+        // Modify the query execution section
+        const resultStream = await clickhouse.query({
+            query: payload.query,
+            format: 'JSONEachRow',
+            clickhouse_settings: {
+                wait_end_of_query: 1,
+            },
+            query_params: {
+                p0: payload.tenancy_id
+            }
+        });
+
+        console.log('Starting stream processing...');
+        
+        let rowCount = 0;
+        const stream = resultStream.stream();
+
+        try {
+            rowCount = await processClickHouseStream(
+                stream, 
+                bigquery, 
+                bigQueryTableName,
+                columnTypes
+            );
+
+            console.log(`Completed processing ${rowCount} total rows`);
+
+        } catch (streamError) {
+            console.error('Error processing stream:', streamError);
+            throw streamError;
+        }
+
+        // Also let's verify the query is correct by logging the exact SQL being executed
+        console.log('Executing raw SQL query:', payload.query.replace('{p0:String}', `'${payload.tenancy_id}'`));
+
+        // Add a test query to verify data exists
+        const testQuery = await clickhouse.query({
+            query: `SELECT COUNT(*) as count FROM "${clickhouseTableName}" WHERE org_id = {p0:String}`,
+            query_params: {
+                p0: payload.tenancy_id
+            }
+        });
+
+        const testResult = await testQuery.json();
+        console.log('Test query result:', testResult);
 
         // Clean up connections
         await clickhouse.close();
+        await new Promise<void>((resolve, reject) => {
+          snowflakeConnection.destroy((err: Error | undefined) => {
+            if (err) {
+              console.error('Error destroying Snowflake connection:', err);
+              reject(err);
+            } else {
+              console.log('Snowflake connection destroyed successfully');
+              resolve();
+            }
+          });
+        });
 
-        return { success: true, rowCount };
+        return { success: true };
       } catch (error) {
+        // Ensure connections are closed even if an error occurs
         if (clickhouse) {
-          await clickhouse.close();
+          try {
+            await clickhouse.close();
+          } catch (closeError) {
+            console.error('Error closing ClickHouse connection:', closeError);
+          }
         }
-        
+
+        if (snowflakeConnection) {
+          await new Promise<void>((resolve) => {
+            snowflakeConnection.destroy((err: Error | undefined) => {
+              if (err) {
+                console.error('Error destroying Snowflake connection:', err);
+              }
+              resolve();
+            });
+          });
+        }
+
         console.error("Sync failed", { error });
         throw error;
       }
     });
   }
 );
+
+function formatValue(value: any): string {
+  if (value === null || value === undefined) return 'NULL';
+  if (typeof value === 'string') return `'${value.replace(/'/g, "''")}'`; // Escape single quotes
+  if (typeof value === 'number' || typeof value === 'boolean') return value.toString();
+  if (value instanceof Date) return `'${value.toISOString()}'`;
+  if (typeof value === 'object') return `'${JSON.stringify(value).replace(/'/g, "''")}'`; // Serialize objects
+  return `'${value}'`;
+}
+
+function formatValuesList(data: Array<Array<any>>): string {
+  const formattedValues = data.map(row => {
+    const formattedRow = row.map(value => {
+      if (value === null || value === undefined) {
+        return 'NULL'; // Handle null/undefined values
+      }
+      if (typeof value === 'string') {
+        return `'${value.replace(/'/g, "''")}'`; // Escape single quotes in strings
+      }
+      if (typeof value === 'number') {
+        return value; // Numbers are added directly
+      }
+      if (typeof value === 'object') {
+        // Convert complex objects or JSON to string
+        return `PARSE_JSON('${JSON.stringify(value).replace(/'/g, "''")}')`;
+      }
+      return `'${value}'`; // Default fallback for other types
+    });
+    return `(${formattedRow.join(', ')})`;
+  });
+
+  return formattedValues.join(',\n');
+}
+// Modify the insert logic to handle VARIANT/OBJECT types
+async function insertRow(row: Record<string, any>, tableName: string, connection: any, columnTypes: ColumnTypes): Promise<void> {
+    try {
+        // Parse the row data
+        const rowData = JSON.parse(row[0].text);
+        console.log('Parsed Row Data:', rowData);
+
+        // Get column names from the parsed row data
+        const columnNames = Object.keys(rowData);
+        const valuesList = row.map((row: any) => {
+          const parsedObject = JSON.parse(row.text);
+          return Object.values(parsedObject);
+      });
+        const columnList = columnNames.map((col: string) => `"${sanitizeIdentifier(col, false)}"`).join(', ');
+        console.log('valuesList:', valuesList)
+        // Create parameterized values list and map the values from rowData
+        const placeholders = formatValuesList(valuesList);
+        console.log('Placeholder:', placeholders)
+        const sqlText = `
+            INSERT INTO "${sanitizeIdentifier(tableName, false)}" 
+            (${columnList}) 
+            VALUES ${placeholders}
+        `;
+
+        console.log('Insert SQL:', sqlText);
+
+        return new Promise((resolve, reject) => {
+            connection.execute({
+                sqlText: sqlText,
+                complete: (err: any, stmt: any) => {
+                    if (err) {
+                        console.error('Insert error:', err);
+                        reject(err);
+                    } else {
+                        resolve(stmt);
+                    }
+                }
+            });
+        });
+    } catch (error) {
+        console.error('Error processing row:', error);
+        console.error('Raw row data:', row);
+        throw error;
+    }
+}
+// Process stream in batches
+async function processClickHouseStream(
+    stream: any, 
+    snowflakeConnection: any, 
+    snowflakeTableName: string,
+    columnTypes: ColumnTypes
+): Promise<number> {
+    let rowCount = 0;
+
+    try {
+        // Create a promise to process the stream
+        return new Promise<number>((resolve, reject) => {
+            stream.on('data', async (row: any, event: any) => {
+                try {
+                    await insertRow(row, snowflakeTableName, snowflakeConnection, columnTypes);
+                    rowCount++;
+                    
+                    if (rowCount % 1000 === 0) {
+                        console.log(`Processed ${rowCount} rows`);
+                        const payload = event.data as SnowflakeSyncPayload;
+                          const supabase = createClient();
+                          const { data: warehouseData } = await supabase
+                            .from('organizations')
+                            .select('id, hyperline_id')
+                            .eq('id', payload.organization)
+                            .single();
+                
+                          // Ensure warehouseData is available before proceeding
+                            const trackExport = {
+                              method: 'POST',
+                              headers: {
+                                Authorization: 'Bearer prod_dc5eb5c34597149afc3379aee12f79437d6ed5b7b4a42d729497ecbcdbccb3ce',
+                                'Content-Type': 'application/json'
+                              },
+                              body: JSON.stringify({
+                                customer_id: warehouseData?.hyperline_id,
+                                event_type: "flexport",
+                                timestamp: new Date().toISOString(), // Use current timestamp
+                                record: {
+                                  id: `D32NAA8-${warehouseData?.id}`, // Dynamic ID based on warehouseData
+                                  durationInMs: 32, // Replace with actual duration if available
+                                  isVerified: true // Set based on your logic
+                                }
+                              })
+                            };
+                
+                            fetch('https://ingest.hyperline.co/v1/events', trackExport)
+                              .then(response => response.json())
+                              .then(response => console.log(response))
+                              .catch(err => console.error(err));
+                
+                              const { data, error } = await supabase
+                              .from('exports')
+                              .insert({
+                                organization: payload.organization,
+                                internal_warehouse: payload.internal_warehouse,
+                                destination_type: payload.destination_type,
+                                destination_name: payload.destination_name,
+                                table: payload.table,
+                                scheduled_at: payload.scheduled_at
+                              })
+                              .select()
+                              .single();
+                                          
+                    }
+                } catch (error) {
+                    console.error('Error processing row:', error);
+                    reject(error);
+                }
+            });
+
+            stream.on('end', () => {
+                console.log(`Completed processing ${rowCount} total rows`);
+                resolve(rowCount);
+            });
+
+            stream.on('error', (error: Error) => {
+                console.error('Stream error:', error);
+                reject(error);
+            });
+        });
+    } catch (error) {
+        console.error('Stream processing error:', error);
+        throw error;
+    }
+}

@@ -64,20 +64,39 @@ export const clickhouseToSnowflake: Map<string, string> = new Map([
 ]);
 
 export const clickhouseToBigQuery: TypeMappings = new Map([
-    ['Int32', 'INT64'],
-    ['Int64', 'INT64'],
-    ['Int16', 'INT64'],
-    ['Float32', 'FLOAT64'],
-    ['Float64', 'FLOAT64'],
-    ['String', 'STRING'],
-    ['UInt8', 'BOOL'],
-    ['Date', 'DATE'],
-    ['DateTime', 'TIMESTAMP'],
-    ['Decimal', 'NUMERIC'],
+    // Integers
+    ['INT8', 'INT64'],
+    ['INT16', 'INT64'],
+    ['INT32', 'INT64'],
+    ['INT64', 'INT64'],
+    ['UINT8', 'INT64'],
+    ['UINT16', 'INT64'],
+    ['UINT32', 'INT64'],
+    ['UINT64', 'INT64'],
+    
+    // Floating point
+    ['FLOAT32', 'FLOAT64'],
+    ['FLOAT64', 'FLOAT64'],
+    
+    // Strings and Binary
+    ['STRING', 'STRING'],
+    ['FIXEDSTRING', 'STRING'],
     ['UUID', 'STRING'],
+    ['BINARY', 'BYTES'],
+    
+    // Date and Time
+    ['DATE', 'DATE'],
+    ['DATE32', 'DATE'],
+    ['DATETIME', 'TIMESTAMP'],
+    ['DATETIME64', 'TIMESTAMP'],
+    
+    // Complex types
+    ['DECIMAL', 'NUMERIC'],
+    ['DECIMAL32', 'NUMERIC'],
+    ['DECIMAL64', 'NUMERIC'],
+    ['DECIMAL128', 'NUMERIC'],
     ['JSON', 'JSON'],
-    ['Array', 'ARRAY'],
-    ['Binary', 'BYTES']
+    ['ARRAY', 'ARRAY']
 ]);
 
 export const clickhouseToRedshift: TypeMappings = new Map([
