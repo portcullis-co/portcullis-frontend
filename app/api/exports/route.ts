@@ -162,6 +162,12 @@ export async function POST(request: Request) {
 
         // Validate credentials before sending
         if (destination_type === 'snowflake') {
+          // Clean up account URL and create new credentials object
+          const cleanedCredentials = {
+            ...credentials,
+            account: credentials.account.replace(/\.snowflakecomputing\.com$/, '')
+          };
+          payload.destination_credentials = cleanedCredentials;
           if (!credentials.account || !credentials.username || !credentials.password) {
             throw new Error('Invalid Snowflake credentials');
           }
@@ -171,14 +177,6 @@ export async function POST(request: Request) {
           if (!credentials.client_email || !credentials.private_key || !credentials.project_id) {
             throw new Error('Invalid Bigquery credentials');
           }
-
-          // Clean up account URL and create new credentials object
-          const cleanedCredentials = {
-            ...credentials,
-            account: credentials.account.replace(/\.snowflakecomputing\.com$/, '')
-          };
-
-          payload.destination_credentials = cleanedCredentials;
         }
 
         console.log('Inngest Event Key present:', !!process.env.INNGEST_EVENT_KEY);
