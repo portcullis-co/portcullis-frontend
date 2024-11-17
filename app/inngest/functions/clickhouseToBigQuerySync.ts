@@ -4,15 +4,7 @@ import { createClient as createClickhouseClient } from '@clickhouse/client';
 import { BigQuery } from '@google-cloud/bigquery';
 import { sanitizeIdentifier } from "@/lib/queryBuilder";
 import { createClient } from '@/lib/supabase/server';
-import { TypeMappings, WarehouseDataType, ClickhouseCredentials, SnowflakeCredentials } from "@/lib/common/types/clickhouse.d";
-
-// Add type definitions
-interface BigQueryCredentials {
-  project_id: string;
-  client_email: string;
-  private_key: string;
-  dataset: string;
-}
+import { TypeMappings, WarehouseDataType, ClickhouseCredentials, BigQueryCredentials } from "@/lib/common/types/clickhouse.d";
 
 interface ClickhouseToBigQueryPayload {
   internal_credentials: string | ClickhouseCredentials;
@@ -159,6 +151,7 @@ export const clickhouseToBigQuerySync = inngest.createFunction(
           throw new Error('Destination credentials are missing');
         }
 
+        console.log('Destination Credentials:', payload.destination_credentials)
         const { project_id, client_email, private_key } = payload.destination_credentials;
 
         if (!project_id || !client_email || !private_key) {
@@ -171,19 +164,6 @@ export const clickhouseToBigQuerySync = inngest.createFunction(
         }
 
         // Format private key with proper validation
-        let formattedPrivateKey: string;
-        try {
-          formattedPrivateKey = private_key
-            ? private_key.toString().replace(/\\n/g, '\n').replace(/\n\s+/g, '\n')
-            : '';
-            
-          if (!formattedPrivateKey) {
-            throw new Error('Private key is empty after formatting');
-          }
-        } catch (e: any) {
-          throw new Error(`Failed to format private key: ${e.message}`);
-        }
-
         // Connect to ClickHouse with error handling
         try {
           clickhouse = createClickhouseClient({
@@ -204,7 +184,7 @@ export const clickhouseToBigQuerySync = inngest.createFunction(
             projectId: project_id,
             credentials: {
               client_email: client_email.trim(),
-              private_key: formattedPrivateKey,
+              private_key: private_key,
             }
           });
         } catch (e: any) {
