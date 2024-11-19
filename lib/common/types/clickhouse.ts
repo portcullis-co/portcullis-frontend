@@ -263,7 +263,7 @@ export const clickhouseToSQL: Map<string, string> = new Map([
     ['OBJECT', 'JSON'],
 
     // Array Types
-    ['ARRAY', 'TEXT'], // Arrays require special handling; TEXT is a fallback
+    ['ARRAY', 'VARCHAR(MAX)'], // Arrays require special handling; TEXT is a fallback
 
     // Boolean Type
     ['BOOLEAN', 'BOOLEAN'],
@@ -277,10 +277,10 @@ export const clickhouseToSQL: Map<string, string> = new Map([
     ['POLYGON', 'POLYGON'],
 
     // Miscellaneous Types
-    ['TUPLE', 'TEXT'], 
+    ['TUPLE', 'VARCHAR(MAX)'], 
     ['NOTHING', 'NULL'], 
     ['BINARY', 'BLOB'], 
-    ['DEFAULT', 'TEXT'] // Default fallback
+    ['DEFAULT', 'VARCHAR(MAX)'] // Default fallback
 ]);
 
 export const clickhouseToKafka: Map<string, string> = new Map([
