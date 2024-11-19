@@ -99,73 +99,251 @@ export const clickhouseToBigQuery: TypeMappings = new Map([
     ['ARRAY', 'ARRAY']
 ]);
 
-export const clickhouseToRedshift: TypeMappings = new Map([
-    ['Int32', 'INTEGER'],
-    ['Int64', 'BIGINT'],
-    ['Int16', 'SMALLINT'],
-    ['Float32', 'FLOAT4'],
-    ['Float64', 'DOUBLE PRECISION'],
-    ['String', 'VARCHAR'],
-    ['UInt8', 'BOOLEAN'],
-    ['Date', 'DATE'], 
-    ['DateTime', 'TIMESTAMP'],
-    ['Decimal', 'DECIMAL'],
+export const clickhouseToRedshift: Map<string, string> = new Map([
+    // Integer Types
+    ['UINT8', 'SMALLINT'],
+    ['UINT16', 'INTEGER'],
+    ['UINT32', 'BIGINT'],
+    ['INT8', 'SMALLINT'],
+    ['INT16', 'SMALLINT'],
+    ['INT32', 'INTEGER'],
+    ['INT64', 'BIGINT'],
+    ['INT128', 'VARCHAR'],
+    ['INT256', 'VARCHAR'],
+    ['UINT64', 'VARCHAR'],
+    ['UINT128', 'VARCHAR'],
+    ['UINT256', 'VARCHAR'],
+
+    // Floating Point Types
+    ['FLOAT32', 'REAL'],
+    ['FLOAT64', 'DOUBLE PRECISION'],
+
+    // Decimal Types
+    ['DECIMAL', 'DECIMAL'],
+
+    // String Types
+    ['STRING', 'VARCHAR'],
+    ['FIXEDSTRING', 'VARCHAR'],
     ['UUID', 'VARCHAR'],
+    ['IPV4', 'VARCHAR'],
+    ['IPV6', 'VARCHAR'],
+
+    // Date and Time Types
+    ['DATE', 'DATE'],
+    ['DATE32', 'DATE'],
+    ['DATETIME', 'TIMESTAMP'],
+    ['DATETIME64', 'TIMESTAMP'],
+
+    // JSON and Semi-Structured Data
     ['JSON', 'SUPER'],
-    ['Array', 'SUPER'],
-    ['Binary', 'BYTEA']
+    ['MAP', 'SUPER'],
+    ['OBJECT', 'SUPER'],
+
+    // Array Types
+    ['ARRAY', 'SUPER'],
+
+    // Boolean Type
+    ['BOOLEAN', 'BOOLEAN'],
+
+    // Geographic and Geometry Types
+    ['GEO', 'VARCHAR'],
+    ['POINT', 'VARCHAR'],
+    ['RING', 'VARCHAR'],
+    ['LINESTRING', 'VARCHAR'],
+    ['MULTILINESTRING', 'VARCHAR'],
+    ['POLYGON', 'VARCHAR'],
+
+    // Miscellaneous Types
+    ['TUPLE', 'VARCHAR'],
+    ['NOTHING', 'NULL'],
+    ['BINARY', 'BYTEA'],
+    ['DEFAULT', 'VARCHAR']
 ]);
 
-export const clickhouseToDatabricks: TypeMappings = new Map([
-    ['Int32', 'INT'],
-    ['Int64', 'BIGINT'],
-    ['Int16', 'SMALLINT'],
-    ['Float32', 'FLOAT'],
-    ['Float64', 'DOUBLE'],
-    ['String', 'STRING'],
-    ['UInt8', 'BOOLEAN'],
-    ['Date', 'DATE'],
-    ['DateTime', 'TIMESTAMP'],
-    ['Decimal', 'DECIMAL'],
+export const clickhouseToDatabricks: Map<string, string> = new Map([
+    // Integer Types
+    ['UINT8', 'SMALLINT'],
+    ['UINT16', 'INT'],
+    ['UINT32', 'BIGINT'],
+    ['INT8', 'TINYINT'],
+    ['INT16', 'SMALLINT'],
+    ['INT32', 'INT'],
+    ['INT64', 'BIGINT'],
+    ['INT128', 'STRING'],
+    ['INT256', 'STRING'],
+    ['UINT64', 'STRING'],
+    ['UINT128', 'STRING'],
+    ['UINT256', 'STRING'],
+
+    // Floating Point Types
+    ['FLOAT32', 'FLOAT'],
+    ['FLOAT64', 'DOUBLE'],
+
+    // Decimal Types
+    ['DECIMAL', 'DECIMAL'],
+
+    // String Types
+    ['STRING', 'STRING'],
+    ['FIXEDSTRING', 'STRING'],
     ['UUID', 'STRING'],
+    ['IPV4', 'STRING'],
+    ['IPV6', 'STRING'],
+
+    // Date and Time Types
+    ['DATE', 'DATE'],
+    ['DATE32', 'DATE'],
+    ['DATETIME', 'TIMESTAMP'],
+    ['DATETIME64', 'TIMESTAMP'],
+
+    // JSON and Semi-Structured Data
     ['JSON', 'STRING'],
-    ['Array', 'ARRAY'],
-    ['Binary', 'BINARY']
+    ['MAP', 'MAP'],
+    ['OBJECT', 'MAP'],
+
+    // Array Types
+    ['ARRAY', 'ARRAY'],
+
+    // Boolean Type
+    ['BOOLEAN', 'BOOLEAN'],
+
+    // Geographic and Geometry Types
+    ['GEO', 'STRING'],
+    ['POINT', 'STRING'],
+    ['RING', 'STRING'],
+    ['LINESTRING', 'STRING'],
+    ['MULTILINESTRING', 'STRING'],
+    ['POLYGON', 'STRING'],
+
+    // Miscellaneous Types
+    ['TUPLE', 'STRING'],
+    ['NOTHING', 'NULL'],
+    ['BINARY', 'BINARY'],
+    ['DEFAULT', 'STRING']
 ]);
 
-export const clickhouseToSQL: TypeMappings = new Map([
-    ['Int32', 'INTEGER'],
-    ['Int64', 'BIGINT'],
-    ['Int16', 'SMALLINT'],
-    ['Float32', 'REAL'],
-    ['Float64', 'DOUBLE PRECISION'],
-    ['String', 'VARCHAR'],
-    ['UInt8', 'BOOLEAN'],
-    ['Date', 'DATE'],
-    ['DateTime', 'TIMESTAMP'],
-    ['Decimal', 'DECIMAL'],
-    ['UUID', 'UUID'],
-    ['JSON', 'JSONB'],
-    ['Array', 'ARRAY'],
-    ['Binary', 'BYTEA']
+
+export const clickhouseToSQL: Map<string, string> = new Map([
+    // Integer Types
+    ['UINT8', 'SMALLINT'],
+    ['UINT16', 'INTEGER'],
+    ['UINT32', 'BIGINT'],
+    ['INT8', 'SMALLINT'],
+    ['INT16', 'SMALLINT'],
+    ['INT32', 'INTEGER'],
+    ['INT64', 'BIGINT'],
+    ['INT128', 'NUMERIC(38)'],
+    ['INT256', 'NUMERIC(78)'],
+    ['UINT64', 'NUMERIC(38)'],
+    ['UINT128', 'NUMERIC(38)'],
+    ['UINT256', 'NUMERIC(78)'],
+
+    // Floating Point Types
+    ['FLOAT32', 'FLOAT'],
+    ['FLOAT64', 'DOUBLE PRECISION'],
+
+    // Decimal Types
+    ['DECIMAL', 'DECIMAL'],
+
+    // String Types
+    ['STRING', 'VARCHAR'],
+    ['FIXEDSTRING', 'CHAR'], 
+    ['UUID', 'CHAR(36)'], 
+    ['IPV4', 'VARCHAR'],
+    ['IPV6', 'VARCHAR'],
+
+    // Date and Time Types
+    ['DATE', 'DATE'],
+    ['DATE32', 'DATE'],
+    ['DATETIME', 'TIMESTAMP'],
+    ['DATETIME64', 'TIMESTAMP'],
+
+    // JSON and Semi-Structured Data
+    ['JSON', 'JSON'],
+    ['MAP', 'JSON'], // Map structures are often treated as JSON
+    ['OBJECT', 'JSON'],
+
+    // Array Types
+    ['ARRAY', 'TEXT'], // Arrays require special handling; TEXT is a fallback
+
+    // Boolean Type
+    ['BOOLEAN', 'BOOLEAN'],
+
+    // Geographic and Geometry Types
+    ['GEO', 'GEOMETRY'],
+    ['POINT', 'POINT'],
+    ['RING', 'GEOMETRY'],
+    ['LINESTRING', 'LINESTRING'],
+    ['MULTILINESTRING', 'MULTILINESTRING'],
+    ['POLYGON', 'POLYGON'],
+
+    // Miscellaneous Types
+    ['TUPLE', 'TEXT'], 
+    ['NOTHING', 'NULL'], 
+    ['BINARY', 'BLOB'], 
+    ['DEFAULT', 'TEXT'] // Default fallback
 ]);
 
-export const clickhouseToKafka: TypeMappings = new Map<string, string>([
-    ['Int32', 'INT32'],
-    ['Int64', 'INT64'],
-    ['Int16', 'INT16'],
-    ['Float32', 'FLOAT'],
-    ['Float64', 'DOUBLE'],
-    ['String', 'STRING'],
-    ['UInt8', 'BOOLEAN'],
-    ['Date', 'DATE'],
-    ['DateTime', 'TIMESTAMP'],
-    ['Decimal', 'DECIMAL'],
+export const clickhouseToKafka: Map<string, string> = new Map([
+    // Integer Types
+    ['UINT8', 'INT8'],
+    ['UINT16', 'INT16'],
+    ['UINT32', 'INT32'],
+    ['INT8', 'INT8'],
+    ['INT16', 'INT16'],
+    ['INT32', 'INT32'],
+    ['INT64', 'INT64'],
+    ['INT128', 'STRING'],
+    ['INT256', 'STRING'],
+    ['UINT64', 'STRING'],
+    ['UINT128', 'STRING'],
+    ['UINT256', 'STRING'],
+
+    // Floating Point Types
+    ['FLOAT32', 'FLOAT'],
+    ['FLOAT64', 'DOUBLE'],
+
+    // Decimal Types
+    ['DECIMAL', 'DECIMAL'],
+
+    // String Types
+    ['STRING', 'STRING'],
+    ['FIXEDSTRING', 'STRING'],
     ['UUID', 'STRING'],
+    ['IPV4', 'STRING'],
+    ['IPV6', 'STRING'],
+
+    // Date and Time Types
+    ['DATE', 'DATE'],
+    ['DATE32', 'DATE'],
+    ['DATETIME', 'TIMESTAMP'],
+    ['DATETIME64', 'TIMESTAMP'],
+
+    // JSON and Semi-Structured Data
     ['JSON', 'STRING'],
-    ['Array', 'STRING'],
-    ['Binary', 'BYTES']
+    ['MAP', 'STRING'],
+    ['OBJECT', 'STRING'],
+
+    // Array Types
+    ['ARRAY', 'STRING'],
+
+    // Boolean Type
+    ['BOOLEAN', 'BOOLEAN'],
+
+    // Geographic and Geometry Types
+    ['GEO', 'STRING'],
+    ['POINT', 'STRING'],
+    ['RING', 'STRING'],
+    ['LINESTRING', 'STRING'],
+    ['MULTILINESTRING', 'STRING'],
+    ['POLYGON', 'STRING'],
+
+    // Miscellaneous Types
+    ['TUPLE', 'STRING'],
+    ['NOTHING', 'NULL'],
+    ['BINARY', 'BYTES'],
+    ['DEFAULT', 'STRING']
 ]);
+
 
 export const typeMatrix = new Map([
     [WarehouseDataType.Snowflake, clickhouseToSnowflake],
