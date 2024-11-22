@@ -116,29 +116,36 @@ async function insertBatch(
 
   const processedRows = rows.map(row => {
     const processedRow: { [key: string]: any } = {};
-    for (const [key, value] of Object.entries(row)) {
-      let baseValue;
-      if (Array.isArray(value)) {
-        baseValue = JSON.parse(value[0]);
-      } else if (typeof value === 'string') {
-        try {
-          baseValue = JSON.parse(value);
-        } catch (e) {
-          // If parsing fails, treat it as a string
-          baseValue = value;
+    const valuesList = row.map((row: any) => {
+      const parsedObject = JSON.parse(row.text);
+      return Object.values(parsedObject);
+    });
+
+    for (const value of valuesList) {
+      for (const item of value) {
+        const baseValue = item;
+        
+        // Extract column name from the baseValue object
+        let columnName = '';
+        for (const [key, val] of Object.entries(baseValue)) {
+          if (typeof val === 'string') {
+            columnName = key;
+            break;
+          }
         }
-      } else if (typeof value === 'object' && value !== null) {
-        baseValue = value;
-      } else {
-        baseValue = value;
+
+        //LOGTOWN
+        console.log('basevalue:',baseValue[columnName])
+        console.log('columnType:',columnType)
+        //ENDLOG
+
+        if (columnName && columnTypes.has(columnName)) {
+          const columnType = columnTypes.get(columnName);
+          processedRow[columnName] = convertValue(baseValue[columnName], columnType);
+        }
       }
-      console.log('basevalue:', baseValue)
-      console.log('key:',key)
-      const columnType = columnTypes.get(key);
-      if (columnType) {
-        processedRow[key] = convertValue(baseValue, columnType);
-      }  else {console.log('sadge_failed_to_column_type')}
     }
+
     return processedRow;
   });
 
@@ -149,7 +156,7 @@ async function insertBatch(
       skipInvalidRows: true,
       ignoreUnknownValues: true
     });
-    console.log('resultzzz:', result)
+
     console.log(`Successfully inserted ${processedRows.length} row(s)`);
     return processedRows.length;
   } catch (error) {
@@ -158,6 +165,7 @@ async function insertBatch(
     throw error;
   }
 }
+
 
 
 
