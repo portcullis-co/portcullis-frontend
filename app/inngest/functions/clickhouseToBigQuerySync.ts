@@ -116,9 +116,21 @@ async function insertBatch(
   const processedRows = rows.map(row => {
     const processedRow: { [key: string]: any } = {};
     for (const [key, value] of Object.entries(row)) {
+      let baseValue;
+      if (Array.isArray(value)) {
+        // Handle array values
+        baseValue = value[0];
+      } else if (typeof value === 'object' && value !== null) {
+        // Handle object values
+        baseValue = Object.values(value)[0];
+      } else {
+        // Handle primitive values
+        baseValue = value;
+      }
+
       const columnType = columnTypes.get(key);
       if (columnType) {
-        processedRow[key] = convertValue(value, columnType);
+        processedRow[key] = convertValue(baseValue, columnType);
       }
     }
     return processedRow;
@@ -141,6 +153,7 @@ async function insertBatch(
   }
 }
 
+
 async function createBigQueryTable(
   bigquery: BigQuery,
   dataset: string,
@@ -148,9 +161,7 @@ async function createBigQueryTable(
   columnTypes: ColumnTypes
 ): Promise<void> {
   const schema = Array.from(columnTypes.entries()).map(([columnName, clickhouseType]) => {
-    console.log('ping_clickhousetype:', clickhouseType)
     const bigqueryType = clickhouseToBigQuery.get(clickhouseType.toUpperCase()) || 'STRING';
-    console.log('pong_bigqueryType:', bigqueryType)
 
     return {
       name: columnName,
