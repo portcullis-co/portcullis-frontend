@@ -149,7 +149,7 @@ async function createBigQueryTable(
 ): Promise<void> {
   const schema = Array.from(columnTypes.entries()).map(([columnName, clickhouseType]) => {
     console.log('ping_clickhousetype:', clickhouseType)
-    const bigqueryType = clickhouseToBigQuery.get(clickhouseType)?.toUpperCase() || 'STRING';
+    const bigqueryType = clickhouseToBigQuery.get(clickhouseType.toUpperCase()) || 'STRING';
     console.log('pong_bigqueryType:', bigqueryType)
 
     return {
