@@ -8,7 +8,7 @@ import { format } from "date-fns";
 interface Export {
   id: string;
   internal_warehouse: string;
-  destination_type: string;
+  type: string;
   destination_name: string;
   scheduled_at: string;
   created_at: string;
@@ -49,7 +49,7 @@ export default function ExportsPage() {
           {exports.map((exp) => (
             <TableRow key={exp.id}>
               <TableCell>{exp.internal_warehouse}</TableCell>
-              <TableCell>{exp.destination_type}</TableCell>
+              <TableCell>{exp.type}</TableCell>
               <TableCell>{exp.destination_name}</TableCell>
               <TableCell>
                 {exp.scheduled_at ? format(new Date(exp.scheduled_at), 'PPp') : 'Not scheduled'}

@@ -26,7 +26,6 @@ const nextConfig = {
         http: false,
         https: false,
         path: false,
-        stream: require.resolve('stream-browserify'),
         crypto: require.resolve('crypto-browserify'),
         zlib: require.resolve('browserify-zlib'),
       };

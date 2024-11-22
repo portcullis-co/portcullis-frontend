@@ -8,7 +8,7 @@ type ClickhouseToSnowflakeSync = {
     destination_credentials: any; // Replace with proper type
     organization: string;
     query: string;
-    destination_type: string;
+    type: string;
     table: string;
     scheduled_at?: string;
   };
@@ -21,7 +21,7 @@ type ClickhouseToBigQuerySync = {
     destination_credentials: any; // Replace with proper type
     organization: string;
     query: string;
-    destination_type: string;
+    type: string;
     table: string;
     scheduled_at?: string;
   };
@@ -34,7 +34,7 @@ type ClickhouseToRedshiftSync = {
     destination_credentials: any; // Replace with proper type
     organization: string;
     query: string;
-    destination_type: string;
+    type: string;
     table: string;
     scheduled_at?: string;
   };

@@ -1,10 +1,8 @@
-import { logger } from "@trigger.dev/sdk/v3";
 import { inngest } from "../client";
 import type { ClickhouseCredentials } from '@/lib/common/types/clickhouse.d';
 import { decrypt } from "@/lib/encryption";
 import { createClient as createClickhouseClient } from '@clickhouse/client';
 import { Client } from 'pg';
-import { Analytics } from '@segment/analytics-node';
 import { clickhouseToRedshift } from '@/lib/common/types/clickhouse';
 
 // Add type definition
@@ -65,7 +63,7 @@ export const clickhouseToRedshiftSync = inngest.createFunction(
           }
         });
 
-        logger.info("Starting data sync", { 
+        console.log("Starting data sync", { 
           source: "Clickhouse", 
           destination: "Redshift",
           table: payload.table 
@@ -91,13 +89,13 @@ export const clickhouseToRedshiftSync = inngest.createFunction(
             FORMAT JSON
           `);
 
-          logger.info("Processed batch", { 
+          console.log("Processed batch", { 
             rowCount: transformedRows.length 
           });
         }
         
       } catch (error) {
-        logger.error("Error during data sync", { error });
+        console.log("Error during data sync", { error });
         throw error;
       } finally {
         await redshift.end();

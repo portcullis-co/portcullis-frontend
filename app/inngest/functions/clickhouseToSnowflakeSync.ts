@@ -13,7 +13,7 @@ import { createClient } from '@/lib/supabase/server';
 interface SnowflakeSyncPayload {
   internal_credentials: string | ClickhouseCredentials;
   destination_credentials: SnowflakeCredentials;
-  destination_type: WarehouseDataType;
+  type: WarehouseDataType;
   query: string;
   table: string;
   organization: string;
@@ -311,7 +311,7 @@ export const clickhouseToSnowflakeSync = inngest.createFunction(
         const createTableSQL = generateSnowflakeCreateTableSQL(
           snowflakeTableName,
           Array.from(columnTypes.entries()).map(([name, type]) => ({ name, type })),
-          payload.destination_type
+          payload.type
       );
         
         console.log('Generated Snowflake CREATE TABLE SQL:', createTableSQL);
@@ -524,39 +524,16 @@ async function processClickHouseStream(
                             .eq('id', payload.organization)
                             .single();
                 
-                          // Ensure warehouseData is available before proceeding
-                            const trackExport = {
-                              method: 'POST',
-                              headers: {
-                                Authorization: 'Bearer prod_dc5eb5c34597149afc3379aee12f79437d6ed5b7b4a42d729497ecbcdbccb3ce',
-                                'Content-Type': 'application/json'
-                              },
-                              body: JSON.stringify({
-                                customer_id: warehouseData?.hyperline_id,
-                                event_type: "flexport",
-                                timestamp: new Date().toISOString(), // Use current timestamp
-                                record: {
-                                  id: `D32NAA8-${warehouseData?.id}`, // Dynamic ID based on warehouseData
-                                  durationInMs: 32, // Replace with actual duration if available
-                                  isVerified: true // Set based on your logic
-                                }
-                              })
-                            };
-                
-                            fetch('https://ingest.hyperline.co/v1/events', trackExport)
-                              .then(response => response.json())
-                              .then(response => console.log(response))
-                              .catch(err => console.error(err));
-                
                               const { data, error } = await supabase
                               .from('exports')
                               .insert({
                                 organization: payload.organization,
                                 internal_warehouse: payload.internal_warehouse,
-                                destination_type: payload.destination_type,
+                                type: payload.type,
                                 destination_name: payload.destination_name,
                                 table: payload.table,
-                                scheduled_at: payload.scheduled_at
+                                scheduled_at: payload.scheduled_at,
+                                rows: rowCount
                               })
                               .select()
                               .single();

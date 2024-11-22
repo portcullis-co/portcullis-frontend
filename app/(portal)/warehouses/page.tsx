@@ -26,12 +26,13 @@ import {
 } from "@/components/ui/select";
 import { table } from 'console';
 import Image from 'next/image';
-import { PlusCircle, Plug } from 'lucide-react';
+import { PlusCircle, Plug, Book, BookOpen } from 'lucide-react';
 import { ExportComponent } from '@runportcullis/portcullis-react';
 import { decrypt } from '@/lib/encryption';
 import { encrypt } from '@/lib/encryption';
 import { Code } from '@/components/ui/code';
 import { Spinner } from '@/components/ui/spinner';
+import Link from 'next/link';
 
 interface Warehouse {
   organization: string;
@@ -436,61 +437,12 @@ export default function InternalWarehouseListPage() {
                     <tr key={warehouse.id} className="border-b transition-colors hover:bg-muted/50">
                       <td className="p-4 align-left">{warehouse.id}</td>
                       <td className="p-4 align-middle">
-                        <Dialog 
-                          open={openDialogId === warehouse.id} 
-                          onOpenChange={(open) => {
-                            if (!open) handleDialogClose();
-                            else handleDialogOpen(warehouse.id);
-                          }}
-                        >
-                          <DialogTrigger asChild>
-                            <Button variant="outline" size="sm" className="gap-2">
-                              <Plug size={16} />
-                              Connect
-                            </Button>
-                          </DialogTrigger>
-                          <DialogContent className="sm:max-w-3xl">
-                            <DialogHeader>
-                              <DialogTitle>Integration Instructions</DialogTitle>
-                              <DialogDescription>
-                                Follow these steps to integrate this warehouse into your application.
-                              </DialogDescription>
-                            </DialogHeader>
-                            <div className="space-y-6">
-                              <div>
-                                <h4 className="text-sm font-medium mb-2">1. Install the SDK</h4>
-                                <Code
-                                  code="npm install @runportcullis/portcullis-react"
-                                  language="bash"
-                                  title="Terminal"
-                                />
-                              </div>
-                              
-                              <div>
-                                <h4 className="text-sm font-medium mb-2">2. Add the Export Component</h4>
-                                <Code 
-                                  code={`import { ExportComponent } from '@runportcullis/react-sdk';
-
-export default function App() {
-  return (
-    <ExportComponent
-      apiKey="YOUR_API_KEY" // Replace with your actual API key
-      organizationId="${organization?.id}"
-      internalWarehouse="${warehouse.id}"
-      tableName="${selectedTable}"
-      tenancyColumn="your-tenancy-column" # Optional
-      tenancyIdentifier="your-tenant-id" # Optional
-    />
-  );
-}`}
-                                  language="tsx"
-                                  title="app/page.tsx"
-                                  showLineNumbers
-                                />
-                              </div>
-                            </div>
-                          </DialogContent>
-                        </Dialog>
+                          <Button variant="outline" size="sm" className="gap-2">
+                            <BookOpen size={16} />
+                            <Link href="https://docs.runportcullis.co/api-reference/exports/create">
+                            View Docs
+                            </Link>
+                          </Button>
                       </td>
                       <td className="p-4 align-middle">
                         <Button

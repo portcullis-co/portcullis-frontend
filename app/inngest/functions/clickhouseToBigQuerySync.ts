@@ -16,7 +16,7 @@ import { createClient } from '@/lib/supabase/server';
 interface BigQuerySyncPayload {
   internal_credentials: string | ClickhouseCredentials;
   destination_credentials: BigQueryCredentials;
-  destination_type: WarehouseDataType;
+  type: WarehouseDataType;
   query: string;
   table: string;
   organization: string;
@@ -370,7 +370,7 @@ export const clickhouseToBigQuerySync = inngest.createFunction(
               .insert({
                 organization: payload.organization,
                 internal_warehouse: payload.internal_warehouse,
-                destination_type: payload.destination_type,
+                type: payload.type,
                 destination_name: payload.destination_name,
                 table: payload.table,
                 scheduled_at: payload.scheduled_at

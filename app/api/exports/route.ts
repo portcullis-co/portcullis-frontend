@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from '@supabase/supabase-js';
 import { auth } from '@clerk/nextjs/server';
 import { validateApiKey } from '@/lib/validateApiKey';
 import { encrypt, decrypt } from '@/lib/encryption';
@@ -13,8 +13,8 @@ import { buildClickHouseQuery } from "@/lib/queryBuilder";
 
 const allowedOrigins = [
   'http://localhost:3000',
-  'https://portcullis-app.fly.dev',
-  'https://portcullis-app.fly.dev/api/exports',
+  'https://app.runportcullis.co/',
+  'https://app.runportcullis.co/api/exports',
   'https://app.inngest.com/'
 ];
 
@@ -49,7 +49,8 @@ export async function POST(request: Request) {
     // Log all headers for debugging
     console.log('Request headers:', Object.fromEntries(request.headers.entries()));
 
-    const supabase = createClient();
+    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!);
     const apiKey = request.headers.get('x-api-key');
     console.log('Received API Key:', apiKey); // Be careful not to log actual keys in production
 
@@ -75,8 +76,7 @@ export async function POST(request: Request) {
 
     const {
       internal_warehouse,
-      internal_credentials,
-      destination_type,
+      type,
       destination_name,
       tenancy_column,
       tenancy_id,
@@ -84,6 +84,12 @@ export async function POST(request: Request) {
       credentials,
       scheduled_at
     } = body;
+
+    const internal_credentials =  await supabase
+    .from('warehouses')
+    .select('internal_credentials, id')
+    .eq('id', internal_warehouse)
+    .single();
 
     // Extract `tenancyColumn` and `tenancyIdentifier` from the request body
     console.log('Request body:', body);
@@ -101,7 +107,7 @@ export async function POST(request: Request) {
     console.log('Query Parameters:', params);
 
     // Validate required fields
-    if (!internal_warehouse || !destination_type || !destination_name || !table || !credentials || !internal_credentials) {
+    if (!internal_warehouse || !type || !table || !credentials || !internal_credentials) {
       return NextResponse.json({
         error: 'Missing required fields'
       }, { status: 400 });
@@ -154,14 +160,14 @@ export async function POST(request: Request) {
           tenancy_column: body.tenancy_column,
           tenancy_id: body.tenancy_id,
           query: query,
-          destination_type: destination_type as WarehouseDataType,
+          type: type as WarehouseDataType,
           destination_name: destination_name,
           table: table,
           scheduled_at: scheduled_at
         };
 
         // Validate credentials before sending
-        if (destination_type === 'snowflake') {
+        if (type === 'snowflake') {
           // Clean up account URL and create new credentials object
           const cleanedCredentials = {
             ...credentials,
@@ -173,7 +179,7 @@ export async function POST(request: Request) {
           }
         }
 
-        if (destination_type === 'bigquery') {
+        if (type === 'bigquery') {
           if (!credentials.client_email || !credentials.private_key || !credentials.project_id) {
             throw new Error('Invalid Bigquery credentials');
           }
@@ -182,7 +188,7 @@ export async function POST(request: Request) {
         console.log('Inngest Event Key present:', !!process.env.INNGEST_EVENT_KEY);
 
         // Send event to trigger Inngest function
-        switch (destination_type) {
+        switch (type) {
           case 'snowflake':
             await inngest.send({
               name: "event/clickhouse-to-snowflake-sync",
@@ -234,7 +240,8 @@ export async function GET(request: Request) {
   const headers = corsHeaders(origin);
   
   try {
-    const supabase = createClient();
+    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!);
     const apiKey = request.headers.get('x-api-key');
     let organizationId;
 
@@ -284,7 +291,8 @@ export async function DELETE(request: Request) {
   const headers = corsHeaders(origin);
   
   try {
-    const supabase = createClient();
+    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!);
     const { userId, orgId } = auth();
     const { id } = await request.json();
 
