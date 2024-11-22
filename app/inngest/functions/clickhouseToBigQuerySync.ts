@@ -104,12 +104,13 @@ function convertValue(value: any, clickhouseType: string): any {
   }
 }
 
+
 async function insertBatch(
   bigquery: BigQuery,
   dataset: string,
   table: string,
   rows: any[],
-  columnTypes: ColumnTypes
+  columnTypes: Map<string, string>
 ): Promise<number> {
   if (!rows.length) return 0;
 
@@ -118,9 +119,16 @@ async function insertBatch(
     for (const [key, value] of Object.entries(row)) {
       let baseValue;
       if (Array.isArray(value)) {
-        baseValue = value[0];
+        baseValue = JSON.parse(value[0]);
+      } else if (typeof value === 'string') {
+        try {
+          baseValue = JSON.parse(value);
+        } catch (e) {
+          // If parsing fails, treat it as a string
+          baseValue = value;
+        }
       } else if (typeof value === 'object' && value !== null) {
-        baseValue = Object.values(value)[0];
+        baseValue = value;
       } else {
         baseValue = value;
       }
@@ -128,9 +136,8 @@ async function insertBatch(
       console.log('key:',key)
       const columnType = columnTypes.get(key);
       if (columnType) {
-        console.log('columnType:',columnType)
         processedRow[key] = convertValue(baseValue, columnType);
-      } else {console.log('sadge_failed_to_column_type')}
+      }  else {console.log('sadge_failed_to_column_type')}
     }
     return processedRow;
   });
@@ -151,6 +158,7 @@ async function insertBatch(
     throw error;
   }
 }
+
 
 
 
