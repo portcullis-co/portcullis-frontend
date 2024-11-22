@@ -118,40 +118,41 @@ async function insertBatch(
     for (const [key, value] of Object.entries(row)) {
       let baseValue;
       if (Array.isArray(value)) {
-        // Handle array values
         baseValue = value[0];
       } else if (typeof value === 'object' && value !== null) {
-        // Handle object values
         baseValue = Object.values(value)[0];
       } else {
-        // Handle primitive values
         baseValue = value;
       }
 
       const columnType = columnTypes.get(key);
       if (columnType) {
+        console.log('basevalue:', baseValue)
+        console.log('columnType:',columnType)
+        console.log('key:',key)
         processedRow[key] = convertValue(baseValue, columnType);
-      }
+      } else {console.log('sadge_failed_to_column_type')}
     }
     return processedRow;
   });
 
   try {
     const tableRef = bigquery.dataset(dataset).table(table);
-    await tableRef.insert(processedRows, {
-      // Add insertion options for better error handling
+    const [result] = await tableRef.insert(processedRows, {
       raw: true,
       skipInvalidRows: true,
       ignoreUnknownValues: true
     });
+    console.log('resultzzz:', result)
+    console.log(`Successfully inserted ${processedRows.length} row(s)`);
     return processedRows.length;
   } catch (error) {
     console.error('Insert error:', error);
-    // Log the first few rows for debugging
     console.error('Sample rows:', JSON.stringify(processedRows.slice(0, 2)));
     throw error;
   }
 }
+
 
 
 async function createBigQueryTable(
