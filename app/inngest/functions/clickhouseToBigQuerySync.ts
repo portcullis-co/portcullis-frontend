@@ -124,12 +124,11 @@ async function insertBatch(
       } else {
         baseValue = value;
       }
-
+      console.log('basevalue:', baseValue)
+      console.log('key:',key)
       const columnType = columnTypes.get(key);
       if (columnType) {
-        console.log('basevalue:', baseValue)
         console.log('columnType:',columnType)
-        console.log('key:',key)
         processedRow[key] = convertValue(baseValue, columnType);
       } else {console.log('sadge_failed_to_column_type')}
     }
