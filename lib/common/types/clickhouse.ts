@@ -63,7 +63,7 @@ export const clickhouseToSnowflake: Map<string, string> = new Map([
     ['DEFAULT', 'VARCHAR']
 ]);
 
-export const clickhouseToBigQuery: TypeMappings = new Map([
+export const clickhouseToBigQuery: Map<string, string> = new Map([
     // Integers
     ['INT8', 'INT64'],
     ['INT16', 'INT64'],
@@ -263,7 +263,7 @@ export const clickhouseToSQL: Map<string, string> = new Map([
     ['OBJECT', 'JSON'],
 
     // Array Types
-    ['ARRAY', 'VARCHAR(MAX)'], // Arrays require special handling; TEXT is a fallback
+    ['ARRAY', 'VARCHAR(MAX)'], // Arrays require special handling; VARCHAR(MAX) is a fallback
 
     // Boolean Type
     ['BOOLEAN', 'BOOLEAN'],

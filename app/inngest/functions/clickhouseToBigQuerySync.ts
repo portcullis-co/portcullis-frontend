@@ -109,7 +109,7 @@ async function insertBatch(
   dataset: string,
   table: string,
   rows: any[],
-  columnTypes: Map<string, string>
+  columnTypes: ColumnTypes
 ): Promise<number> {
   if (!rows.length) return 0;
 
@@ -145,9 +145,10 @@ async function createBigQueryTable(
   bigquery: BigQuery,
   dataset: string,
   table: string,
-  columnTypes: Map<string, string>
+  columnTypes: ColumnTypes
 ): Promise<void> {
   const schema = Array.from(columnTypes.entries()).map(([columnName, clickhouseType]) => {
+    
     const bigqueryType = clickhouseToBigQuery.get(clickhouseType)?.toUpperCase() || 'STRING';
     return {
       name: columnName,
