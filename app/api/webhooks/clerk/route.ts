@@ -127,7 +127,7 @@ export async function POST(req: Request) {
         .insert([
           {
             name,
-            apiKey,
+            api_key: apiKey,
             hyperline_id: hyperlineCustomer.id,
             created_by: created_by,
             svix_id: svix_app.data.id,  // Assuming `svix_app.data.id` is the correct value
