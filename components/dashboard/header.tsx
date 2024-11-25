@@ -8,7 +8,7 @@ const Header = () => {
       <div className="flex flex-col md:flex-row md:items-center md:justify-between">
         <h2 className="text-xl font-semibold text-black mb-2 md:mb-0"></h2>
         <div className="flex items-center space-x-4">
-          <ModeToggle />
+          {/* <ModeToggle /> */}
           <button className="text-black hover:text-gray-600">
             <Bell size={20} />
           </button>

@@ -438,8 +438,8 @@ export default function InternalWarehouseListPage() {
                       <td className="p-4 align-left">{warehouse.id}</td>
                       <td className="p-4 align-middle">
                           <Button variant="outline" size="sm" className="gap-2">
+                          <Link href="https://docs.runportcullis.co/api-reference/exports/create">
                             <BookOpen size={16} />
-                            <Link href="https://docs.runportcullis.co/api-reference/exports/create">
                             View Docs
                             </Link>
                           </Button>

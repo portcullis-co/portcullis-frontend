@@ -135,13 +135,17 @@ async function insertBatch(
         }
 
         //LOGTOWN
-        console.log('basevalue:',baseValue[columnName])
-        console.log('columnType:',columnType)
+        console.log('basevalue:',baseValue)
         //ENDLOG
 
         if (columnName && columnTypes.has(columnName)) {
           const columnType = columnTypes.get(columnName);
-          processedRow[columnName] = convertValue(baseValue[columnName], columnType);
+          console.log('columnType:',columnType)
+          if (columnType) {
+            processedRow[columnName] = convertValue(baseValue, columnType);
+          } else {
+            console.warn(`Column type for ${columnName} is undefined.`);
+          }
         }
       }
     }
@@ -153,10 +157,10 @@ async function insertBatch(
     const tableRef = bigquery.dataset(dataset).table(table);
     const [result] = await tableRef.insert(processedRows, {
       raw: true,
-      skipInvalidRows: true,
-      ignoreUnknownValues: true
+      skipInvalidRows: false,
+      ignoreUnknownValues: false
     });
-
+    console.log(`Result:`, result);
     console.log(`Successfully inserted ${processedRows.length} row(s)`);
     return processedRows.length;
   } catch (error) {
