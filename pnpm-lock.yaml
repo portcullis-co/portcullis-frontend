@@ -13,6 +13,9 @@ dependencies:
   '@aws-sdk/client-redshift':
     specifier: ^3.675.0
     version: 3.683.0
+  '@clerk/backend':
+    specifier: ^1.18.0
+    version: 1.18.0(react-dom@18.3.1)(react@18.3.1)
   '@clerk/nextjs':
     specifier: ^5.7.1
     version: 5.7.5(next@14.2.13)(react-dom@18.3.1)(react@18.3.1)
@@ -2260,6 +2263,20 @@ packages:
       - react-dom
     dev: false
 
+  /@clerk/backend@1.18.0(react-dom@18.3.1)(react@18.3.1):
+    resolution: {integrity: sha512-FIGBtr8qIgS+NbovKcLOIg8BsQj1JaykW3VKft3H83tONQD5Rg9ENXj/JX1HyZGC3ixLv5BUxu4bihQ78L/gJQ==}
+    engines: {node: '>=18.17.0'}
+    dependencies:
+      '@clerk/shared': 2.17.0(react-dom@18.3.1)(react@18.3.1)
+      '@clerk/types': 4.35.0
+      cookie: 0.7.0
+      snakecase-keys: 5.4.4
+      tslib: 2.4.1
+    transitivePeerDependencies:
+      - react
+      - react-dom
+    dev: false
+
   /@clerk/clerk-react@5.12.0(react-dom@18.3.1)(react@18.3.1):
     resolution: {integrity: sha512-3Lr2QazCm5R6ZLbu7wM+d5YwCElrAoX00OBWcKqjPYaWDJCCmEYN6LJbLzOTYQ8QT1J1ZIed85/lKa+q2aD1aA==}
     engines: {node: '>=18.17.0'}
@@ -2294,6 +2311,29 @@ packages:
       tslib: 2.4.1
     dev: false
 
+  /@clerk/shared@2.17.0(react-dom@18.3.1)(react@18.3.1):
+    resolution: {integrity: sha512-Jn/oBGjGfQQJIiMMf6Y0puC62R0rL1l/gLoPWnO6vNlCBzuFHGcsSTCWWDpmAXfyVwY7wJ7Dcq/B1UEsKeJ8zQ==}
+    engines: {node: '>=18.17.0'}
+    requiresBuild: true
+    peerDependencies:
+      react: ^18 || ^19.0.0-0
+      react-dom: ^18 || ^19.0.0-0
+    peerDependenciesMeta:
+      react:
+        optional: true
+      react-dom:
+        optional: true
+    dependencies:
+      '@clerk/types': 4.35.0
+      dequal: 2.0.3
+      glob-to-regexp: 0.4.1
+      js-cookie: 3.0.5
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
+      std-env: 3.7.0
+      swr: 2.2.5(react@18.3.1)
+    dev: false
+
   /@clerk/shared@2.9.2(react-dom@18.3.1)(react@18.3.1):
     resolution: {integrity: sha512-vRMDj13Pv9n8Pf+f8P40AvqJ8QEq348qUxUVIf17vn9R3/toicrQOY/Q6qsrAS8KXY9+ZnyTafJa+VFK+6iEFA==}
     engines: {node: '>=18.17.0'}
@@ -2318,6 +2358,13 @@ packages:
 
   /@clerk/types@4.26.0:
     resolution: {integrity: sha512-VGcrQz/XpCiGbpIIzKVwWw4nLorzKnIP1IAemj1xt/80ULcdEZCncwhas6PoYBBsl1W55A1SwP9B/pEs0nmkCw==}
+    engines: {node: '>=18.17.0'}
+    dependencies:
+      csstype: 3.1.1
+    dev: false
+
+  /@clerk/types@4.35.0:
+    resolution: {integrity: sha512-sBSYCCIXcwI+JHQRqBtskw10+rQ1NcA9w1G6ndnS48F5C+if6xI9OpYaaDjhhvzLjBeZFydKAOhe35mgC7bmoA==}
     engines: {node: '>=18.17.0'}
     dependencies:
       csstype: 3.1.1

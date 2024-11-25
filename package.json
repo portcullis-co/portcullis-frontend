@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-redshift": "^3.675.0",
+    "@clerk/backend": "^1.18.0",
     "@clerk/nextjs": "^5.7.1",
     "@clickhouse/client": "^1.6.0",
     "@clickhouse/client-web": "^1.7.0",
