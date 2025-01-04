@@ -1,115 +1,98 @@
+"use client"
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from '@/components/ui/button';
-import { ArrowUpRight, DollarSign, Database, Activity, TrendingUp, Users, Clock } from 'lucide-react';
-
-// Define the type for the metric card props
-interface MetricCardProps {
-  title: string;
-  value: string | number;
-  icon: React.ReactNode;
-  description: string;
-}
-
-// Define the type for the KPI item props
-interface KPIItemProps {
-  label: string;
-  value: string | number;
-  icon: React.ReactNode;
-  trend: number;
-}
+import { Bell, Database, ShieldCheck, TrendingUp } from 'lucide-react';
+import { useOrganization, useUser } from '@clerk/nextjs';
+import Link from 'next/link';
 
 export default function DashboardPage() {
-  // Mock data for the metrics
-  const metrics = {
-    monthlyRows: 1000000,
-    totalETLCost: 500,
-    topDataSource: "Google Ads",
-    dataWarehousesConnected: 3,
-  };
+  const firstName = useUser().user?.firstName
+  const org = useOrganization().organization?.name
+  const logo = useOrganization().organization?.imageUrl
 
-  // Mock data for KPIs
-  const kpis: KPIItemProps[] = [
-    { label: "Data Syncs", value: 1234, icon: <TrendingUp className="h-4 w-4" />, trend: 5.6 },
-    { label: "Active Connections", value: 24, icon: <Users className="h-4 w-4" />, trend: -2.3 },
-    { label: "Avg. Sync Time", value: "2.5s", icon: <Clock className="h-4 w-4" />, trend: -0.8 },
+  const features = [
+    {
+      icon: <Database className="w-6 h-6 text-blue-500" />,
+      title: "Multi-Warehouse Support",
+      description: "Connect and sync data across Clickhouse, Snowflake, BigQuery, and more."
+    },
+    {
+      icon: <ShieldCheck className="w-6 h-6 text-green-500" />,
+      title: "Enterprise-Grade Security",
+      description: "End-to-end encryption and robust access controls to protect your data."
+    },
+    {
+      icon: <Bell className="w-6 h-6 text-purple-500" />,
+      title: "Sync Update Notifications",
+      description: "Updates on sync status and coverage via email and SMS."
+    }
   ];
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <MetricCard
-          title="Monthly Rows"
-          value={metrics.monthlyRows.toLocaleString()}
-          icon={<Database className="h-4 w-4" />}
-          description="Total rows processed this month"
-        />
-        <MetricCard
-          title="Total Reverse ETL Cost"
-          value={`$${metrics.totalETLCost.toFixed(2)}`}
-          icon={<DollarSign className="h-4 w-4" />}
-          description="Cost of Reverse ETL operations"
-        />
-        <MetricCard
-          title="Top Data Source"
-          value={metrics.topDataSource}
-          icon={<Activity className="h-4 w-4" />}
-          description="Top data source for Reverse ETL"
-        />
-        <MetricCard
-          title="Data Warehouses"
-          value={metrics.dataWarehousesConnected}
-          icon={<Database className="h-4 w-4" />}
-          description="Connected data warehouses"
-        />
+    <div className="container mx-auto p-6 space-y-6 max-h-screen overflow-hidden">
+      <div className="grid grid-cols-1 pb-4 lg:grid-cols-2 gap-6 h-full">
+        {/* Welcome Section */}
+        <div className="flex flex-col justify-between space-y-4">
+            <div>
+              <h1 className="text-3xl font-bold mb-2">
+                Welcome, <span className="text-black">{firstName}!</span>
+              </h1>
+
+              <div className="flex items-center space-x-2 mb-4">
+                <h2 className="text-lg">
+                  Organization: <span className="font-semibold">{org}</span>
+                </h2>
+                {logo && <img src={logo} alt="Organization Logo" className="h-8 w-8 rounded-full" />}
+              </div>
+
+              <p className="text-gray-600 mb-4">
+                Ready to start opening the Portcullis to seamless embedded ETL in your application? We support 6+ destinations with Clickhouse, Snowflake, Redshift, BigQuery, and more..
+              </p>
+            </div>
+
+            <div className="flex space-x-4">
+              <Button className="bg-black text-[#faff69] hover:bg-gray-800">
+                <Link href={'/warehouses'}>
+                  Start Export Setup
+                </Link>
+              </Button>
+              <Button variant="outline">
+                View Integrations
+              </Button>
+            </div>
+        </div>
+        
+        <div className="h-full max-h-[500px]">
+          <iframe 
+            src="https://demo.arcade.software/JFPiCBoIjnITtXiuz5n7?embed&embed_mobile=inline&embed_desktop=inline&show_copy_link=true" 
+            title="Portcullis | Magic Links for Enterprise Data Sharing" 
+            className="w-full h-full rounded-lg" 
+            frameBorder="0" 
+            loading="lazy" 
+            allowFullScreen 
+            allow="clipboard-write"
+          ></iframe>
+        </div>
       </div>
 
-      <h2 className="text-xl md:text-2xl font-semibold mb-4">Key Performance Indicators</h2>
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-        {kpis.map((kpi, index) => (
-          <KPIItem key={index} {...kpi} />
-        ))}
-      </div>
-
-      <div className="flex justify-end">
+      {/* Feature Highlights */}
+      <div className="bg-gray-50 rounded-lg p-6 mt-6 max-h-[250px] overflow-y-auto">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {features.map((feature, index) => (
+            <div 
+              key={index} 
+              className="bg-white border rounded-lg p-4 shadow-sm hover:shadow-md transition-all space-y-3 text-center"
+            >
+              <div className="flex justify-center mb-3">
+                {feature.icon}
+              </div>
+              <h3 className="font-semibold text-lg">{feature.title}</h3>
+              <p className="text-gray-600 text-sm">{feature.description}</p>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
-  );
-}
-// Use the MetricCardProps interface for the component props
-function MetricCard({ title, value, icon, description }: MetricCardProps) {
-  return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium">{title}</CardTitle>
-        {icon}
-      </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-bold">{value}</div>
-        <p className="text-xs text-muted-foreground">{description}</p>
-      </CardContent>
-    </Card>
-  );
-}
-
-function KPIItem({ label, value, icon, trend }: KPIItemProps) {
-  const trendColor = trend >= 0 ? "text-green-500" : "text-red-500";
-  const trendIcon = trend >= 0 ? "↑" : "↓";
-
-  return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium">{label}</CardTitle>
-        <div className="p-2 bg-gray-100 dark:bg-gray-800 rounded-full">
-          {icon}
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-bold">{value}</div>
-        <p className={`text-sm ${trendColor}`}>
-          {trendIcon} {Math.abs(trend)}%
-        </p>
-      </CardContent>
-    </Card>
   );
 }

@@ -2,23 +2,23 @@ import { inngest } from "../client";
 import { decrypt } from "@/lib/encryption";
 import { createClient as createClickhouseClient } from '@clickhouse/client';
 import Snowflake from 'snowflake-sdk';
-import { Analytics } from '@segment/analytics-node';
 import { Connection } from "snowflake-sdk";
 import { TypeMappings, WarehouseDataType, ClickhouseCredentials, SnowflakeCredentials } from "@/lib/common/types/clickhouse.d";
 import { clickhouseToSnowflake, typeMatrix } from "@/lib/common/types/clickhouse";
 import { json } from "stream/consumers";
 import { error } from "console";
 import { sanitizeIdentifier } from "@/lib/queryBuilder";
-
+import { createClient } from '@/lib/supabase/server';
 // Add type definition
 interface SnowflakeSyncPayload {
   internal_credentials: string | ClickhouseCredentials;
   destination_credentials: SnowflakeCredentials;
-  destination_type: WarehouseDataType;
+  type: WarehouseDataType;
   query: string;
   table: string;
   organization: string;
   internal_warehouse: string;
+  destination_name: string;
   tenancy_column?: string;
   tenancy_id?: string;
   scheduled_at?: string;
@@ -311,7 +311,7 @@ export const clickhouseToSnowflakeSync = inngest.createFunction(
         const createTableSQL = generateSnowflakeCreateTableSQL(
           snowflakeTableName,
           Array.from(columnTypes.entries()).map(([name, type]) => ({ name, type })),
-          payload.destination_type
+          payload.type
       );
         
         console.log('Generated Snowflake CREATE TABLE SQL:', createTableSQL);
@@ -401,7 +401,7 @@ export const clickhouseToSnowflakeSync = inngest.createFunction(
             console.error('Error closing ClickHouse connection:', closeError);
           }
         }
-        
+
         if (snowflakeConnection) {
           await new Promise<void>((resolve) => {
             snowflakeConnection.destroy((err: Error | undefined) => {
@@ -497,7 +497,6 @@ async function insertRow(row: Record<string, any>, tableName: string, connection
         throw error;
     }
 }
-
 // Process stream in batches
 async function processClickHouseStream(
     stream: any, 
@@ -510,13 +509,35 @@ async function processClickHouseStream(
     try {
         // Create a promise to process the stream
         return new Promise<number>((resolve, reject) => {
-            stream.on('data', async (row: any) => {
+            stream.on('data', async (row: any, event: any) => {
                 try {
                     await insertRow(row, snowflakeTableName, snowflakeConnection, columnTypes);
                     rowCount++;
                     
                     if (rowCount % 1000 === 0) {
                         console.log(`Processed ${rowCount} rows`);
+                        const payload = event.data as SnowflakeSyncPayload;
+                          const supabase = createClient();
+                          const { data: warehouseData } = await supabase
+                            .from('organizations')
+                            .select('id, hyperline_id')
+                            .eq('id', payload.organization)
+                            .single();
+                
+                              const { data, error } = await supabase
+                              .from('exports')
+                              .insert({
+                                organization: payload.organization,
+                                internal_warehouse: payload.internal_warehouse,
+                                type: payload.type,
+                                destination_name: payload.destination_name,
+                                table: payload.table,
+                                scheduled_at: payload.scheduled_at,
+                                rows: rowCount
+                              })
+                              .select()
+                              .single();
+                                          
                     }
                 } catch (error) {
                     console.error('Error processing row:', error);

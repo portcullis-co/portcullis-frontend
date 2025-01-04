@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { useOrganization } from "@clerk/nextjs";
 import { useToast } from "@/hooks/use-toast";
 import { Toaster } from "@/components/ui/toaster";
+import { Skeleton } from "@/components/ui/skeleton";
 import { createClient as Clickhouse } from '@clickhouse/client-web';
 import {
   Select,
@@ -25,11 +26,13 @@ import {
 } from "@/components/ui/select";
 import { table } from 'console';
 import Image from 'next/image';
-import { PlusCircle, Plug } from 'lucide-react';
+import { PlusCircle, Plug, Book, BookOpen } from 'lucide-react';
 import { ExportComponent } from '@runportcullis/portcullis-react';
 import { decrypt } from '@/lib/encryption';
 import { encrypt } from '@/lib/encryption';
 import { Code } from '@/components/ui/code';
+import { Spinner } from '@/components/ui/spinner';
+import Link from 'next/link';
 
 interface Warehouse {
   organization: string;
@@ -116,54 +119,27 @@ export default function InternalWarehouseListPage() {
           'Content-Type': 'application/json',
         },
       });
-
+  
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-
+  
       const data = await response.json();
       if (!data || !Array.isArray(data.warehouses)) {
         throw new Error('Unexpected data format from server');
       }
-
-      // Decrypt credentials for each warehouse
-      const decryptedWarehouses = await Promise.all(
-        data.warehouses.map(async (warehouse: Warehouse) => {
-          try {
-            // Make sure we're accessing the correct property
-            if (!warehouse.internal_credentials) {
-              throw new Error('No credentials found');
-            }
-            
-            console.log('Encrypted credentials:', warehouse.internal_credentials);
-
-            const decryptedCredsString = await decrypt(warehouse.internal_credentials);
-            console.log('Decrypted string:', decryptedCredsString);
-
-            // Add additional decryption if needed
-            const finalDecryptedString = await decrypt(decryptedCredsString);
-            const decryptedCreds = JSON.parse(finalDecryptedString);
-
-            return {
-              ...warehouse,
-              host: decryptedCreds.host,
-              database: decryptedCreds.database,
-            };
-          } catch (error) {
-            console.error('Error decrypting credentials:', error);
-            return {
-              ...warehouse,
-              host: 'Decryption failed',
-              database: 'Decryption failed',
-            };
-          }
-        })
-      );
-
-      setWarehouses(decryptedWarehouses);
+  
+      // Add this line to set the warehouses state
+      setWarehouses(data.warehouses);
+  
     } catch (error) {
       console.error('Error fetching Clickhouse warehouses:', error);
       setError(error instanceof Error ? error.message : "An unknown error occurred");
+      toast({
+        title: "Error Fetching Warehouses",
+        description: error instanceof Error ? error.message : "An unknown error occurred",
+        variant: "destructive",
+      });
     } finally {
       setIsLoading(false);
     }
@@ -218,6 +194,7 @@ export default function InternalWarehouseListPage() {
   };
 
   const handleTestConnection = async () => {
+    setIsLoading(true);
     try {
       const clickhouseClient = Clickhouse({
         url: newWarehouse.credentials.host,
@@ -241,6 +218,8 @@ export default function InternalWarehouseListPage() {
         description: error instanceof Error ? error.message : "An unknown error occurred",
         variant: "destructive",
       });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -309,7 +288,7 @@ export default function InternalWarehouseListPage() {
       });
     }
   };
-
+      
   return (
     <div className="p-8">
       <div className="flex items-center justify-between mb-8">
@@ -317,9 +296,10 @@ export default function InternalWarehouseListPage() {
           <h1 className="text-2xl font-semibold">Internal Warehouses</h1>
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild onClick={() => handleDialogOpen('new')}>
-            <Button variant="default" className="gap-2">
-              <PlusCircle size={16} />
+            <Button variant="default" color='#faff69' className="gap-2">
+              <PlusCircle color='#faff69' size={16} />
               Connect Database
             </Button>
           </DialogTrigger>
@@ -377,7 +357,9 @@ export default function InternalWarehouseListPage() {
                     })}
                   />
                 </div>
-                <Button onClick={handleTestConnection}>Test Connection</Button>
+                <Button onClick={handleTestConnection} disabled={isLoading}>
+                  {isLoading ? <Spinner size="small" show={true} /> : "Test Connection"}
+                </Button>
               </div>
             ) : (
               <div className="grid gap-4 py-4">
@@ -398,17 +380,10 @@ export default function InternalWarehouseListPage() {
             )}
           </DialogContent>
         </Dialog>
+        </Dialog>
       </div>
       
       {isLoading ? (
-        <div className="flex items-center justify-center h-[400px]">
-          <p className="text-muted-foreground">Loading your connections...</p>
-        </div>
-      ) : error ? (
-        <div className="flex items-center justify-center h-[400px]">
-          <p className="text-red-500">{error}</p>
-        </div>
-      ) : (
         <div className="rounded-lg border bg-card">
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -421,67 +396,53 @@ export default function InternalWarehouseListPage() {
                 </tr>
               </thead>
               <tbody>
+                {[1, 2, 3].map((i) => (
+                  <tr key={i} className="border-b">
+                    <td className="p-4 align-middle">
+                      <Skeleton className="h-8 w-[200px]" />
+                    </td>
+                    <td className="p-4 align-middle">
+                      <Skeleton className="h-8 w-[150px]" />
+                    </td>
+                    <td className="p-4 align-middle">
+                      <Skeleton className="h-8 w-[100px]" />
+                    </td>
+                    <td className="p-4 align-middle">
+                      <Skeleton className="h-8 w-[100px]" />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : error ? (
+        <div className="flex items-center justify-center h-[400px]">
+          <p className="text-red-500">{error}</p>
+        </div>
+      ) : (
+        <div className="rounded-lg border bg-card">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b bg-muted/50">
+                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Warehouse ID</th>
+                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Integrate</th>
+                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
                 {warehouses.length > 0 ? (
                   warehouses.map((warehouse) => (
                     <tr key={warehouse.id} className="border-b transition-colors hover:bg-muted/50">
-                      <td className="p-4 align-middle">{warehouse.host}</td>
-                      <td className="p-4 align-middle">{warehouse.database}</td>
+                      <td className="p-4 align-left">{warehouse.id}</td>
                       <td className="p-4 align-middle">
-                        <Dialog 
-                          open={openDialogId === warehouse.id} 
-                          onOpenChange={(open) => {
-                            if (!open) handleDialogClose();
-                            else handleDialogOpen(warehouse.id);
-                          }}
-                        >
-                          <DialogTrigger asChild>
-                            <Button variant="outline" size="sm" className="gap-2">
-                              <Plug size={16} />
-                              Connect
-                            </Button>
-                          </DialogTrigger>
-                          <DialogContent className="sm:max-w-3xl">
-                            <DialogHeader>
-                              <DialogTitle>Integration Instructions</DialogTitle>
-                              <DialogDescription>
-                                Follow these steps to integrate this warehouse into your application.
-                              </DialogDescription>
-                            </DialogHeader>
-                            <div className="space-y-6">
-                              <div>
-                                <h4 className="text-sm font-medium mb-2">1. Install the SDK</h4>
-                                <Code
-                                  code="npm install @runportcullis/portcullis-react"
-                                  language="bash"
-                                  title="Terminal"
-                                />
-                              </div>
-                              
-                              <div>
-                                <h4 className="text-sm font-medium mb-2">2. Add the Export Component</h4>
-                                <Code 
-                                  code={`import { ExportComponent } from '@runportcullis/react-sdk';
-
-export default function App() {
-  return (
-    <ExportComponent
-      apiKey="YOUR_API_KEY" // Replace with your actual API key
-      organizationId="${organization?.id}"
-      internalWarehouse="${warehouse.id}"
-      tableName="${selectedTable}"
-      tenancyColumn="your-tenancy-column" # Optional
-      tenancyIdentifier="your-tenant-id" # Optional
-    />
-  );
-}`}
-                                  language="tsx"
-                                  title="app/page.tsx"
-                                  showLineNumbers
-                                />
-                              </div>
-                            </div>
-                          </DialogContent>
-                        </Dialog>
+                          <Button variant="outline" size="sm" className="gap-2">
+                          <Link href="https://docs.runportcullis.co/api-reference/exports/create">
+                            <BookOpen size={16} />
+                            View Docs
+                            </Link>
+                          </Button>
                       </td>
                       <td className="p-4 align-middle">
                         <Button

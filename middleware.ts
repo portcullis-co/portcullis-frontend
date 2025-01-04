@@ -6,14 +6,9 @@ const isPublicRoute = createRouteMatcher([
   '/sign-in(.*)',
   '/sign-up(.*)',
   '/auth(.*)',
-  '/api/exports(.*)',
-  '/pricing',
-  '/privacy',
-  '/api/warehouses(.*)',
-  '/invite/(.*)',
-  '/syncs/(.*)',
-  '/terms',
-  '/api/(.*)',
+  '/api(.*)',
+  '/api/warehouses',
+  '/api/exports/',
   '/api/inngest(.*)',
   '/.redwood/functions/inngest(.*)',
   '/x/inngest(.*)',
@@ -25,24 +20,24 @@ const allowedRoutes = [
   '/',
   '/home',
   '/auth',
-  '/api/(.*)',
-  '/links',
-  '/api/pipeline',
-  '/api/links/(.*)',
-  '/api/links',
   '/api/warehouses',
+  '/api/exports',
+  '/api/billing',
+  '/api/keys',
+  '/api/inngest',
   '/create-organization',
-  '/api/syncs',
-  '/api/check-connection',
-  '/syncs/(.*)',
-  '/invite/(.*)',
   '/warehouses',
-  '/portal/(.*)',
+  '/settings',
+  '/exports',
+  '/create-organization',
+  '/sign-in',
+  '/sign-up'
 ];
 
 const allowedOrigins = [
   'http://localhost:3000',
-  'https://portcullis-app.fly.dev',
+  'https://app.runportcullis.co/',
+  'https://portcullis-467549375477.us-central1.run.app/'
 ];
 
 function corsMiddleware(request: NextRequest, response: NextResponse) {

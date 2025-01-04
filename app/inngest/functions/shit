@@ -1,0 +1,7 @@
+          bigquery = new BigQuery({
+            projectId: project_id,
+            credentials: {
+              client_email: client_email.trim(),
+              private_key: private_key,
+            }
+          });

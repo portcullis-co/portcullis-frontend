@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from '@supabase/supabase-js';
 import { auth } from '@clerk/nextjs/server';
 import { encrypt, decrypt } from '@/lib/encryption';
 
 const allowedOrigins = [
   'http://localhost:3000',
-  'https://portcullis-app.fly.dev',
+  'https://app.runportcullis.co/',
+  'https://app.runportcullis.co/api/warehouses',
 ];
 
 function corsHeaders(origin: string | null) {
@@ -32,7 +33,8 @@ export async function OPTIONS(request: Request) {
 }
 
 export async function GET(request: Request) {
-  const supabase = createClient(); // TODO: Maybe use RDS instead
+  const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!); // TODO: Maybe use RDS instead
   const { searchParams } = new URL(request.url);
   const organizationId = searchParams.get('organizationId');
   const id = searchParams.get('id');
@@ -99,7 +101,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const supabase = createClient();
+  const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!);
   const { userId, orgId } = auth();
   const slug = auth().orgSlug;
   console.log(process.env.ENCRYPTION_KEY); // Should print the base64 encoded key
@@ -140,7 +143,8 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const supabase = createClient(); // TODO: Maybe use RDS instead
+  const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!); // TODO: Maybe use RDS instead
   const { id } = await request.json();
 
   const { error } = await supabase

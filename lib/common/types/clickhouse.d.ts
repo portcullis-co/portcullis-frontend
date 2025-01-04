@@ -40,9 +40,11 @@ export type SnowflakeCredentials = {
 }
 
 export type BigQueryCredentials = {
-  projectId: string;
-  keyFilename: string;
+  project_id: string;
+  private_key: string;
   dataset: string;
+  client_email: string;
+  
 }
 
 export type ClickhouseToSnowflakeFunc = (params: any) => Promise<void>;
