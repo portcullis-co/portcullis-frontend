@@ -14,7 +14,8 @@ import {
   Menu,
   X,
   Cpu,
-  Braces
+  Braces,
+  Plane
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -44,8 +45,8 @@ const Sidebar: React.FC<SidebarProps> = ({ openWarehouseConnection, openAppsConn
   const userImage = user?.imageUrl;
 
   const menuItems = [
-    { icon: Home, label: 'Welcome', href: `/portal/${portalId}/welcome` },
-    { icon: Cpu, label: 'Instances', href: `/portal/${portalId}/instances` },
+    { icon: Home, label: 'Welcome', href: `/portal/${portalId}/` },
+    { icon: ArrowRightLeft, label: 'Transfers', href: `/portal/${portalId}/transfers` },
     { icon: Braces, label: 'Endpoints', href: `/portal/${portalId}/endpoints` },
     { icon: Settings, label: 'Settings', href: `/portal/${portalId}/settings` },
   ];  
