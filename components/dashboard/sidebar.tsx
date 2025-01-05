@@ -12,7 +12,9 @@ import {
   LogOut,
   Building,
   Menu,
-  X
+  X,
+  Cpu,
+  Braces
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -41,8 +43,8 @@ const Sidebar: React.FC<SidebarProps> = ({ openWarehouseConnection, openAppsConn
 
   const menuItems = [
     { icon: Home, label: 'Welcome', href: '/' },
-    { icon: Database, label: 'Internal Warehouses', href: '/warehouses' },
-    { icon: ArrowRightLeft, label: 'Exports', href: '/exports' },
+    { icon: Cpu, label: 'Instances', href: '/instances' },
+    { icon: Braces, label: 'Endpoints', href: '/endpoints' },
     { icon: Settings, label: 'Settings', href: '/settings' }
   ];
 

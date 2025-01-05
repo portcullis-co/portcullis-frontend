@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { auth } from '@clerk/nextjs/server';
-import { encrypt, decrypt } from '@/lib/encryption';
+import { generateApiKey } from '@/lib/generateApiKey';
 
 const allowedOrigins = [
   'http://localhost:3000',
   'https://app.runportcullis.co/',
-  'https://app.runportcullis.co/api/warehouses',
+  'https://app.runportcullis.co/api/endpoints',
 ];
 
 function corsHeaders(origin: string | null) {
@@ -33,63 +33,26 @@ export async function OPTIONS(request: Request) {
 }
 
 export async function GET(request: Request) {
-  const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!); // TODO: Maybe use RDS instead
+  const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!); // TODO: Maybe use RDS instead
   const { searchParams } = new URL(request.url);
+  const { userId, orgId } = auth();
   const organizationId = searchParams.get('organizationId');
-  const id = searchParams.get('id');
-
+  const portalId = searchParams.get('portalId');
   // Handle fetch by ID
-  if (id) {
-    try {
-      const { data, error } = await supabase
-        .from('warehouses')
-        .select('*')
-        .eq('id', id)
-        .single();
-
-      if (error) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
-      }
-
-      if (!data) {
-        return NextResponse.json({ error: 'Warehouse not found' }, { status: 404 });
-      }
-
-      // Decrypt credentials before sending response
-      const decryptedWarehouse = {
-        ...data,
-        credentials: data.internal_credentials ? await decrypt(data.internal_credentials) : null
-      };
-
-      return NextResponse.json({ warehouse: decryptedWarehouse });
-    } catch (error) {
-      console.error('Error fetching warehouse:', error);
-      return NextResponse.json({ error: 'Failed to fetch warehouse' }, { status: 500 });
-    }
-  }
 
   // Handle fetch by organizationId
-  if (organizationId) {
+  if (portalId) {
     try {
-      const { data: warehouses, error } = await supabase // TODO: Maybe use RDS instead
-        .from('warehouses')
+      const { data: endpoints, error } = await supabase // TODO: Maybe use RDS instead
+        .from('endpoints')
         .select('*')
-        .eq('organization', organizationId);
+        .eq('portal', portalId);
 
       if (error) {
         return NextResponse.json({ error: error.message }, { status: 500 });
       }
 
-      // Decrypt credentials for each warehouse
-      const decryptedWarehouses = await Promise.all(
-        warehouses.map(async (warehouse) => ({
-          ...warehouse,
-          credentials: warehouse.internal_credentials ? await decrypt(warehouse.internal_credentials) : null
-        }))
-      );
-
-      return NextResponse.json({ warehouses: decryptedWarehouses });
+      return NextResponse.json({ endpoints: endpoints });
     } catch (error) {
       console.error('Error processing warehouses:', error);
       return NextResponse.json({ error: 'Failed to process warehouses' }, { status: 500 });
@@ -105,26 +68,24 @@ export async function POST(request: Request) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!);
   const { userId, orgId } = auth();
   const slug = auth().orgSlug;
-  console.log(process.env.ENCRYPTION_KEY); // Should print the base64 encoded key
+  const { searchParams } = new URL(request.url);
+  const portalId = searchParams.get('portalId');
   
   if (!userId || !orgId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   
   try {
-    const { internal_credentials, table_name} = await request.json();
-
-    
+    const { instanceId, organizationId, source, credentials } = await request.json();
     // Encrypt credentials before storing
-    const encryptedCredentials = await encrypt(internal_credentials);
-    
     const { data, error } = await supabase
-      .from('warehouses')
+      .from('endpoints')
       .insert({ 
-        internal_credentials: encryptedCredentials,
-        organization: orgId, 
-        slug,
-        table_name,
+        instance: instanceId,
+        portal: portalId,
+        organization: organizationId,
+        api_keys: generateApiKey(organizationId),
+        lamda_url: // Todo: Add this
       })
       .select()
       .single();
@@ -143,12 +104,11 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!); // TODO: Maybe use RDS instead
+  const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!); // TODO: Maybe use RDS instead
   const { id } = await request.json();
 
   const { error } = await supabase
-    .from('warehouses')
+    .from('endpoints')
     .delete()
     .eq('id', id);
 

@@ -293,7 +293,7 @@ export default function InternalWarehouseListPage() {
     <div className="p-8">
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-semibold">Internal Warehouses</h1>
+          <h1 className="text-2xl font-semibold">Instances</h1>
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
