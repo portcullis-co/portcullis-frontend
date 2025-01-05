@@ -36,17 +36,19 @@ const Sidebar: React.FC<SidebarProps> = ({ openWarehouseConnection, openAppsConn
   const router = useRouter();
   const { user } = useUser();
   const auth = useAuth()
+  const { pathname } = window.location;
+  const portalId = pathname.split('/')[2]; // Assumes URL structure is /portal/{portalId}/...  
   const firstName = user?.firstName;
   const lastName = user?.lastName;
   const userInitials = `${firstName?.[0] || ''}${lastName?.[0] || ''}`;
   const userImage = user?.imageUrl;
 
   const menuItems = [
-    { icon: Home, label: 'Welcome', href: '/' },
-    { icon: Cpu, label: 'Instances', href: '/instances' },
-    { icon: Braces, label: 'Endpoints', href: '/endpoints' },
-    { icon: Settings, label: 'Settings', href: '/settings' }
-  ];
+    { icon: Home, label: 'Welcome', href: `/portal/${portalId}/welcome` },
+    { icon: Cpu, label: 'Instances', href: `/portal/${portalId}/instances` },
+    { icon: Braces, label: 'Endpoints', href: `/portal/${portalId}/endpoints` },
+    { icon: Settings, label: 'Settings', href: `/portal/${portalId}/settings` },
+  ];  
 
   return (
     <>

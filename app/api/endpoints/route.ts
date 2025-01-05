@@ -85,7 +85,6 @@ export async function POST(request: Request) {
         portal: portalId,
         organization: organizationId,
         api_keys: generateApiKey(organizationId),
-        lamda_url: // Todo: Add this
       })
       .select()
       .single();

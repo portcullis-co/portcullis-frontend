@@ -36,16 +36,16 @@ export async function GET(request: Request) {
   const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!); // TODO: Maybe use RDS instead
   const { searchParams } = new URL(request.url);
   const { userId, orgId } = auth();
-  const organizationId = searchParams.get('organizationId');
+  const portalId = searchParams.get('portalId');
   // Handle fetch by ID
 
   // Handle fetch by organizationId
-  if (userId) {
+  if (portalId) {
     try {
       const { data: instances, error } = await supabase // TODO: Maybe use RDS instead
         .from('instances')
         .select('*')
-        .eq('user', userId);
+        .eq('portal', portalId);
 
       if (error) {
         return NextResponse.json({ error: error.message }, { status: 500 });

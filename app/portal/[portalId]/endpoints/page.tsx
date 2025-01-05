@@ -19,22 +19,22 @@ export default function ExportsPage() {
   const { organization } = useOrganization();
   
   useEffect(() => {
-    const fetchExports = async () => {
+    const fetchEndpoints = async () => {
       if (!organization) return;
       
-      const response = await fetch(`/api/exports?organizationId=${organization.id}`);
+      const response = await fetch(`/api/endpoints?organizationId=${organization.id}`);
       if (response.ok) {
         const data = await response.json();
         setExports(data);
       }
     };
 
-    fetchExports();
+    fetchEndpoints();
   }, [organization]);
 
   return (
     <div className="container mx-auto py-6">
-      <h1 className="text-2xl font-bold mb-4">Active Exports</h1>
+      <h1 className="text-2xl font-bold mb-4">Active Endpoints</h1>
       <Table>
         <TableHeader>
           <TableRow>
