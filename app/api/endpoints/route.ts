@@ -76,12 +76,12 @@ export async function POST(request: Request) {
   }
   
   try {
-    const { instanceId, organizationId, source, credentials } = await request.json();
+    const { transferId, organizationId, source, credentials } = await request.json();
     // Encrypt credentials before storing
     const { data, error } = await supabase
       .from('endpoints')
       .insert({ 
-        instance: instanceId,
+        transfer: transferId,
         portal: portalId,
         organization: organizationId,
         api_keys: generateApiKey(organizationId),

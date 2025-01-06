@@ -7,6 +7,8 @@
     }
   },
   "dependencies": {
+    "@aws-sdk/client-ecs": "^3.722.0",
+    "@aws-sdk/client-lambda": "^3.721.0",
     "@aws-sdk/client-redshift": "^3.675.0",
     "@clerk/backend": "^1.18.0",
     "@clerk/nextjs": "^5.7.1",
@@ -19,6 +21,7 @@
     "@google-cloud/bigquery": "^7.9.1",
     "@hyperline/react-components": "^0.2.27",
     "@mui/material": "^6.1.2",
+    "@octokit/rest": "^21.0.2",
     "@radix-ui/react-avatar": "^1.1.1",
     "@radix-ui/react-checkbox": "^1.1.2",
     "@radix-ui/react-dialog": "^1.1.1",
@@ -64,6 +67,7 @@
     "nanoid": "^5.0.7",
     "next": "14.2.13",
     "next-themes": "0.2.1",
+    "octokit": "^4.0.3",
     "pg": "^8.13.0",
     "postcss": "8.4.29",
     "react": "18.3.1",
@@ -75,6 +79,7 @@
     "sequelize": "^6.37.4",
     "snowflake-sdk": "^1.14.0",
     "sonner": "0.7.1",
+    "stripe": "^17.5.0",
     "svix": "^1.37.0",
     "tailwind-merge": "1.14.0",
     "tailwindcss": "3.3.3",

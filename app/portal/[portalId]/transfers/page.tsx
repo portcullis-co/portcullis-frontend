@@ -20,7 +20,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { v4 as uuidv4 } from "uuid";
 
-interface Instance {
+interface Transfer {
   organization: string;
   id: string;
   status: string;
@@ -29,8 +29,8 @@ interface Instance {
   source_credentials: string | null;
 }
 
-export default function InstanceListPage() {
-  const [instances, setInstances] = useState<Instance[]>([]);
+export default function transferListPage() {
+  const [transfers, setTransfers] = useState<Transfer[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isPricingOpen, setIsPricingOpen] = useState(false);
   const [actionsDisabled, setActionsDisabled] = useState(false);
@@ -40,8 +40,8 @@ export default function InstanceListPage() {
   const { user } = useUser();
   const { toast } = useToast();
   
-  // Generate instanceId once when component mounts
-  const [instanceId] = useState(() => uuidv4());
+  // Generate transferId once when component mounts
+  const [transferId] = useState(() => uuidv4());
 
   // Generate curl command as a memoized value
   const curlCommand = React.useMemo(() => {
@@ -52,24 +52,24 @@ export default function InstanceListPage() {
     
     return `curl -X POST https://api.yourservice.com/provision \\
   -H "Content-Type: application/json" \\
-  -d '{"instanceId": "${instanceId}",
+  -d '{"transferId": "${transferId}",
        "organizationId": "${organization.id}",
        "portalId": "${portalId}",
        "userId": "${user.id}"}'`;
-  }, [isLoaded, organization, user, instanceId]);
+  }, [isLoaded, organization, user, transferId]);
 
   useEffect(() => {
     if (isLoaded && organization) {
-      fetchInstances(organization.id);
+      fetchTransfers(organization.id);
     } else if (isLoaded && !organization) {
       setError("No organization found. Please ensure you're part of an organization.");
       setIsLoading(false);
     }
   }, [isLoaded, organization]);
 
-  const handleDeleteInstance = async (id: string) => {
+  const handleDeletetransfer = async (id: string) => {
     try {
-      const response = await fetch("/api/instances", {
+      const response = await fetch("/api/transfers", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id }),
@@ -77,50 +77,50 @@ export default function InstanceListPage() {
   
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to delete instance");
+        throw new Error(errorData.error || "Failed to delete transfer");
       }
   
-      // Remove the deleted instance from the state
-      setInstances((prevInstances) =>
-        prevInstances.filter((instance) => instance.id !== id)
+      // Remove the deleted transfer from the state
+      setTransfers((prevTransfers) =>
+        prevTransfers.filter((transfer) => transfer.id !== id)
       );
   
       toast({
-        title: "Instance Deleted",
-        description: "The instance was successfully deleted.",
+        title: "transfer Deleted",
+        description: "The transfer was successfully deleted.",
         variant: "default",
       });
     } catch (error) {
       console.error(error);
       toast({
         title: "Error",
-        description: "Failed to delete instance.",
+        description: "Failed to delete transfer.",
         variant: "destructive",
       });
     }
   };
   
 
-  const fetchInstances = async (id: string) => {
+  const fetchTransfers = async (id: string) => {
     setIsLoading(true);
     setError(null);
     try {
       const { pathname } = window.location;
       const portalId = pathname.split("/")[2];
-      const response = await fetch(`/api/instances?portalId=${portalId}`);
-      if (!response.ok) throw new Error("Failed to fetch instances");
+      const response = await fetch(`/api/transfers?portalId=${portalId}`);
+      if (!response.ok) throw new Error("Failed to fetch transfers");
       const data = await response.json();
-      setInstances(data.instances || []);
-      setActionsDisabled(data.instances.length === 1);
+      setTransfers(data.transfers || []);
+      setActionsDisabled(data.transfers.length === 1);
     } catch (error) {
-      setError("Error fetching instances");
-      toast({ title: "Error", description: "Could not fetch instances", variant: "destructive" });
+      setError("Error fetching transfers");
+      toast({ title: "Error", description: "Could not fetch transfers", variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleAddInstance = async () => {
+  const handleAddtransfer = async () => {
     try {
       const orgId = organization?.id;
       const userId = user?.id;
@@ -128,25 +128,25 @@ export default function InstanceListPage() {
       const portalId = pathname.split("/")[2];
       if (!orgId) throw new Error("Organization ID is not available");
 
-      const response = await fetch("/api/instances", {
+      const response = await fetch("/api/transfers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ organization: orgId, portal: portalId, user: userId, instanceId }),
+        body: JSON.stringify({ organization: orgId, portal: portalId, user: userId, transferId }),
       });
 
-      if (!response.ok) throw new Error("Failed to deploy instance");
+      if (!response.ok) throw new Error("Failed to deploy transfer");
       const data = await response.json();
-      setInstances([...instances, data]);
+      setTransfers([...transfers, data]);
       setIsDialogOpen(false);
       toast({
-        title: "Instance Deployed",
-        description: "Your instance was successfully deployed.",
+        title: "Transfer Initiated",
+        description: "Your transfer was successfully deployed.",
         variant: "default",
       });
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to deploy instance.",
+        description: "Failed to deploy transfer.",
         variant: "destructive",
       });
     }
@@ -155,7 +155,7 @@ export default function InstanceListPage() {
   return (
     <div className="p-8">
       <div className="flex items-center justify-between mb-8">
-        <h1 className="text-2xl font-semibold">Deployed Instances</h1>
+        <h1 className="text-2xl font-semibold">Transfer History</h1>
         <HoverCard openDelay={200}>
           <HoverCardTrigger asChild>
             <div>
@@ -164,15 +164,15 @@ export default function InstanceListPage() {
                 disabled={actionsDisabled}
                 onClick={() => actionsDisabled ? setIsPricingOpen(true) : setIsDialogOpen(true)}
               >
-                Deploy Instance
+                Deploy transfer
               </Button>
             </div>
           </HoverCardTrigger>
           <HoverCardContent className="w-80" hidden={!actionsDisabled}>
             <div className="flex flex-col space-y-2">
-              <p className="text-sm font-medium">Need more instances?</p>
+              <p className="text-sm font-medium">Need more transfers?</p>
               <p className="text-sm text-muted-foreground">
-                Upgrade your plan to deploy additional instances.
+                Upgrade your plan to initiate additional transfers.
               </p>
               <Button 
                 variant="outline" 
@@ -189,40 +189,40 @@ export default function InstanceListPage() {
 
       {isLoading ? (
         <Skeleton className="h-24" />
-      ) : instances.length > 0 ? (
+      ) : transfers.length > 0 ? (
         <div className="rounded-md border">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-1/4">Instance ID</TableHead>
+                <TableHead className="w-1/4">transfer ID</TableHead>
                 <TableHead className="w-1/4">URL</TableHead>
                 <TableHead className="w-1/4">Status</TableHead>
                 <TableHead className="w-1/4 text-center">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {instances.map((instance) => {
-                const canCreateEndpoint = instance.source && instance.source_credentials;
+              {transfers.map((transfer) => {
+                const canCreateEndpoint = transfer.source && transfer.source_credentials;
                 return (
-                  <TableRow key={instance.id} className="hover:bg-muted/50">
-                    <TableCell className="font-medium">{instance.id}</TableCell>
+                  <TableRow key={transfer.id} className="hover:bg-muted/50">
+                    <TableCell className="font-medium">{transfer.id}</TableCell>
                     <TableCell>
                       <a 
-                        href={instance.url} 
+                        href={transfer.url} 
                         target="_blank" 
                         rel="noopener noreferrer"
                         className="text-blue-600 hover:underline"
                       >
-                        {instance.url}
+                        {transfer.url}
                       </a>
                     </TableCell>
                     <TableCell>
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        instance.status === 'running' ? 'bg-green-100 text-green-800' :
-                        instance.status === 'stopped' ? 'bg-red-100 text-red-800' :
+                        transfer.status === 'running' ? 'bg-green-100 text-green-800' :
+                        transfer.status === 'stopped' ? 'bg-red-100 text-red-800' :
                         'bg-yellow-100 text-yellow-800'
                       }`}>
-                        {instance.status}
+                        {transfer.status}
                       </span>
                     </TableCell>
                     <TableCell className="text-center">
@@ -231,14 +231,14 @@ export default function InstanceListPage() {
                           variant="default"
                           size="sm"
                           disabled={!canCreateEndpoint}
-                          onClick={() => console.log(`Create Endpoint for ${instance.id}`)}
+                          onClick={() => console.log(`Create Endpoint for ${transfer.id}`)}
                         >
                           Create Endpoint
                         </Button>
                         <Button
                         variant="destructive"
                         size="sm"
-                        onClick={() => handleDeleteInstance(instance.id)}
+                        onClick={() => handleDeletetransfer(transfer.id)}
                       >
                         Delete
                       </Button>
@@ -251,15 +251,15 @@ export default function InstanceListPage() {
           </Table>
         </div>
       ) : (
-        <p className="text-center text-muted-foreground">No instances deployed.</p>
+        <p className="text-center text-muted-foreground">No transfers deployed.</p>
       )}
 
      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
-            <DialogTitle>Provision New Instance</DialogTitle>
+            <DialogTitle>Start a transfer</DialogTitle>
             <DialogDescription>
-              Run the following command to provision your instance:
+              Run the following command to start a transfer:
             </DialogDescription>
           </DialogHeader>
           <div className="bg-slate-100 p-4 rounded-md">

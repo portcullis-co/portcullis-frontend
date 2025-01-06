@@ -6,7 +6,7 @@ import { encrypt, decrypt } from '@/lib/encryption';
 const allowedOrigins = [
   'http://localhost:3000',
   'https://app.runportcullis.co/',
-  'https://app.runportcullis.co/api/instances',
+  'https://app.runportcullis.co/api/transfers',
 ];
 
 function corsHeaders(origin: string | null) {
@@ -42,8 +42,8 @@ export async function GET(request: Request) {
   // Handle fetch by organizationId
   if (portalId) {
     try {
-      const { data: instances, error } = await supabase // TODO: Maybe use RDS instead
-        .from('instances')
+      const { data: transfers, error } = await supabase // TODO: Maybe use RDS instead
+        .from('transfers')
         .select('*')
         .eq('portal', portalId);
 
@@ -51,7 +51,7 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: error.message }, { status: 500 });
       }
 
-      return NextResponse.json({ instances: instances });
+      return NextResponse.json({ transfers: transfers });
     } catch (error) {
       console.error('Error processing warehouses:', error);
       return NextResponse.json({ error: 'Failed to process warehouses' }, { status: 500 });
@@ -79,7 +79,7 @@ export async function POST(request: Request) {
     // Encrypt credentials before storing
     
     const { data, error } = await supabase
-      .from('instances')
+      .from('transfers')
       .insert({ 
         portal: portal,
         organization: organizationId,
@@ -106,7 +106,7 @@ export async function DELETE(request: Request) {
   const { id } = await request.json();
 
   const { error } = await supabase
-    .from('instances')
+    .from('transfers')
     .delete()
     .eq('id', id);
 

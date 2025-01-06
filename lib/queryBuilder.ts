@@ -64,7 +64,7 @@ function getClickHouseParamType(value: any): string {
     if (typeof value === 'boolean') {
         return 'Bool';
     }
-    if (value instanceof Date) {
+    if (value transferof Date) {
         return 'DateTime';
     }
     // Default to String for other types
