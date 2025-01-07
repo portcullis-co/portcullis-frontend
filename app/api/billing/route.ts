@@ -42,23 +42,23 @@ export async function POST(request: Request) {
   
     const { data, error } = await supabase
       .from('organizations')
-      .select('hyperline_id')
+      .select('stripe_customer_id')
       .eq('id', orgId)
       .single();
   
     try {
-      const hyperline = {
+      const stripe = {
         method: 'POST',
         headers: {
           Authorization: 'Bearer prod_e08272d6a532626b895c4673fc9133ce21115a88c66989e472b9aba8ba003259',
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          customer_id: data?.hyperline_id
+          customer_id: data?.stripe_customer_id
         })
       };
   
-      const response = await fetch('https://api.hyperline.co/v1/integrations/components/token', hyperline);
+      const response = await fetch('https://api.hyperline.co/v1/integrations/components/token', stripe);
       const responseData = await response.json();
       console.log(responseData);
   

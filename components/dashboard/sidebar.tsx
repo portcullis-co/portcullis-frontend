@@ -1,22 +1,24 @@
-import React, { useState } from 'react';
-import Link from 'next/link';
-import Image from 'next/image';
-import { useRouter } from 'next/navigation';
-import { useAuth, useUser } from '@clerk/nextjs';
+"use client";
+
+import React, { useEffect, useState } from "react";
+import Link from "next/link";
+import Image from "next/image";
+import { useAuth, useUser, useOrganization } from "@clerk/nextjs";
+import { createClient } from "@supabase/supabase-js";
 import {
   Home,
-  Database,
-  ArrowRightLeft,
   Settings,
   User,
   LogOut,
   Building,
   Menu,
   X,
-  Cpu,
-  Braces,
-  Plane
-} from 'lucide-react';
+  Key,
+  LayoutDashboard,
+  Plus,
+  CloudLightning,
+  Activity
+} from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,8 +26,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Button } from '@/components/ui/button';
+import { useSearchParams } from "next/navigation";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+
+// Initialize Supabase client
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL || "",
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
+);
 
 interface SidebarProps {
   openWarehouseConnection: () => void;
@@ -34,22 +42,85 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({ openWarehouseConnection, openAppsConnection }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const router = useRouter();
+  const [organizationId, setOrganizationId] = useState<string | null>(null);
+  const [portalId, setPortalId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
   const { user } = useUser();
-  const auth = useAuth()
-  const { pathname } = window.location;
-  const portalId = pathname.split('/')[2]; // Assumes URL structure is /portal/{portalId}/...  
+  const { organization } = useOrganization();
+  const auth = useAuth();
+
   const firstName = user?.firstName;
   const lastName = user?.lastName;
-  const userInitials = `${firstName?.[0] || ''}${lastName?.[0] || ''}`;
+  const userInitials = `${firstName?.[0] || ""}${lastName?.[0] || ""}`;
   const userImage = user?.imageUrl;
 
+  useEffect(() => {
+    const fetchPortalId = async () => {
+      if (!organization?.id) {
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from("portals")
+          .select("id")
+          .eq("organization", organization.id)
+          .single();
+
+        if (error) {
+          console.error("Error fetching portal ID:", error);
+          setPortalId(null);
+        } else {
+          setPortalId(data?.id || null);
+        }
+
+        setOrganizationId(organization.id);
+      } catch (error) {
+        console.error("Error in fetchPortalId:", error);
+        setPortalId(null);
+      }
+
+      setIsLoading(false);
+    };
+
+    fetchPortalId();
+  }, [organization?.id]);
+
   const menuItems = [
-    { icon: Home, label: 'Welcome', href: `/portal/${portalId}/` },
-    { icon: ArrowRightLeft, label: 'Transfers', href: `/portal/${portalId}/transfers` },
-    { icon: Braces, label: 'Endpoints', href: `/portal/${portalId}/endpoints` },
-    { icon: Settings, label: 'Settings', href: `/portal/${portalId}/settings` },
-  ];  
+    { 
+      icon: Home, 
+      label: "Home", 
+      href: portalId ? `/portal?portalId=${portalId}` : "#",
+      disabled: !portalId
+    },
+    { 
+      icon: Activity, 
+      label: "Activity", 
+      href: portalId ? `/portal/activity?portalId=${portalId}` : "#",
+      disabled: !portalId
+    },
+    { 
+      icon: Settings, 
+      label: "Settings", 
+      href: portalId ? `/portal/settings?portalId=${portalId}` : "/settings"
+    },
+    { 
+      icon: Key, 
+      label: "API Keys", 
+      href: portalId ? `/api/keys?portalId=${portalId}` : "/api/keys"
+    },
+    { 
+      icon: Plus, 
+      label: "Create Organization", 
+      href: "/create-organization" 
+    }
+  ];
+
+  if (isLoading) {
+    return <div className="flex items-center justify-center h-screen">Loading...</div>;
+  }
 
   return (
     <>
@@ -59,12 +130,12 @@ const Sidebar: React.FC<SidebarProps> = ({ openWarehouseConnection, openAppsConn
       >
         {isOpen ? <X size={24} /> : <Menu size={24} />}
       </button>
-      
-      <div 
+
+      <div
         className={`
           fixed inset-y-0 left-0 z-40 w-72 bg-white border-r border-gray-200
           transform transition-transform duration-300 ease-in-out
-          ${isOpen ? 'translate-x-0' : '-translate-x-full'} 
+          ${isOpen ? "translate-x-0" : "-translate-x-full"} 
           md:relative md:translate-x-0
           flex flex-col
         `}
@@ -72,31 +143,32 @@ const Sidebar: React.FC<SidebarProps> = ({ openWarehouseConnection, openAppsConn
         <div className="flex items-center justify-center px-4 py-4 border-b border-gray-200">
           <Image src="/portcullis.svg" alt="Logo" width={40} height={40} />
         </div>
-        
+
         <nav className="flex-grow py-4 space-y-1">
           {menuItems.map((item) => (
-            <Link 
-              key={item.href} 
-              href={item.href} 
-              className="
+            <Link
+              key={item.href}
+              href={item.disabled ? "#" : item.href}
+              className={`
                 flex items-center px-4 py-3 
                 text-gray-700 hover:bg-gray-100 
                 transition-colors duration-200
                 group
-              "
+                ${(item.disabled || item.href === "#") ? "opacity-50 cursor-not-allowed" : ""}
+              `}
             >
-              <item.icon 
-                className="mr-3 text-gray-500 group-hover:text-gray-900" 
-                size={20} 
+              <item.icon
+                className="mr-3 text-gray-500 group-hover:text-gray-900"
+                size={20}
               />
               <span className="font-medium">{item.label}</span>
             </Link>
           ))}
         </nav>
-        
+
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <div 
+            <div
               className="
                 flex items-center justify-between 
                 px-4 py-4 border-t border-gray-200 
@@ -109,7 +181,9 @@ const Sidebar: React.FC<SidebarProps> = ({ openWarehouseConnection, openAppsConn
                   <AvatarFallback>{userInitials}</AvatarFallback>
                 </Avatar>
                 <div className="flex flex-col">
-                  <span className="font-semibold text-gray-800">{firstName} {lastName}</span>
+                  <span className="font-semibold text-gray-800">
+                    {firstName} {lastName}
+                  </span>
                   <span className="text-xs text-gray-500">
                     {user?.primaryEmailAddress?.emailAddress}
                   </span>
@@ -127,8 +201,8 @@ const Sidebar: React.FC<SidebarProps> = ({ openWarehouseConnection, openAppsConn
               <span>Organization</span>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem 
-              onClick={() => auth.signOut()} 
+            <DropdownMenuItem
+              onClick={() => auth.signOut()}
               className="text-red-600 cursor-pointer hover:bg-red-50"
             >
               <LogOut className="mr-2 h-4 w-4" />
