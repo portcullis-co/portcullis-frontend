@@ -17,7 +17,8 @@ import {
   LayoutDashboard,
   Plus,
   CloudLightning,
-  Activity
+  Activity,
+  DatabaseZap
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -96,9 +97,9 @@ const Sidebar: React.FC<SidebarProps> = ({ openWarehouseConnection, openAppsConn
       disabled: !portalId
     },
     { 
-      icon: Activity, 
-      label: "Activity", 
-      href: portalId ? `/portal/activity?portalId=${portalId}` : "#",
+      icon: DatabaseZap, 
+      label: "Dispatches", 
+      href: portalId ? `/portal/dispatches?portalId=${portalId}` : "#",
       disabled: !portalId
     },
     { 
