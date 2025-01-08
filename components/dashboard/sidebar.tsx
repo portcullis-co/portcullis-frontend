@@ -14,12 +14,16 @@ import {
   Menu,
   X,
   Key,
-  LayoutDashboard,
   Plus,
-  CloudLightning,
-  Activity,
   DatabaseZap
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,10 +31,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useSearchParams } from "next/navigation";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
-// Initialize Supabase client
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || "",
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
@@ -46,6 +48,8 @@ const Sidebar: React.FC<SidebarProps> = ({ openWarehouseConnection, openAppsConn
   const [organizationId, setOrganizationId] = useState<string | null>(null);
   const [portalId, setPortalId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [hasSubscription, setHasSubscription] = useState(false);
+  const [showSubscriptionDialog, setShowSubscriptionDialog] = useState(false);
 
   const { user } = useUser();
   const { organization } = useOrganization();
@@ -57,7 +61,7 @@ const Sidebar: React.FC<SidebarProps> = ({ openWarehouseConnection, openAppsConn
   const userImage = user?.imageUrl;
 
   useEffect(() => {
-    const fetchPortalId = async () => {
+    const fetchOrganizationData = async () => {
       if (!organization?.id) {
         setIsLoading(false);
         return;
@@ -65,29 +69,58 @@ const Sidebar: React.FC<SidebarProps> = ({ openWarehouseConnection, openAppsConn
 
       try {
         const { data, error } = await supabase
+          .from("organizations")
+          .select("stripe_customer_id, has_active_subscription")
+          .eq("id", organization.id)
+          .single();
+
+        if (error) {
+          console.error("Error fetching organization data:", error);
+        } else {
+          setHasSubscription(data?.has_active_subscription || false);
+        }
+
+        const portalData = await supabase
           .from("portals")
           .select("id")
           .eq("organization", organization.id)
           .single();
 
-        if (error) {
-          console.error("Error fetching portal ID:", error);
-          setPortalId(null);
-        } else {
-          setPortalId(data?.id || null);
+        if (portalData.data) {
+          setPortalId(portalData.data.id);
         }
 
         setOrganizationId(organization.id);
       } catch (error) {
-        console.error("Error in fetchPortalId:", error);
-        setPortalId(null);
+        console.error("Error in fetchOrganizationData:", error);
       }
 
       setIsLoading(false);
     };
 
-    fetchPortalId();
+    fetchOrganizationData();
   }, [organization?.id]);
+
+  const handleSubscribeClick = async () => {
+    try {
+      const response = await fetch('/api/stripe/checkout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          monthlyPrice: 'price_1QeuOWGSPDCwljL797nW2ICm',
+          meteredPrice: 'price_1QeuOWGSPDCwljL7YSHXy2TI',
+          organizationId: organization?.id,
+        }),
+      });
+
+      const { url } = await response.json();
+      window.location.href = url;
+    } catch (error) {
+      console.error('Error creating checkout session:', error);
+    }
+  };
 
   const menuItems = [
     { 
@@ -100,22 +133,25 @@ const Sidebar: React.FC<SidebarProps> = ({ openWarehouseConnection, openAppsConn
       icon: DatabaseZap, 
       label: "Dispatches", 
       href: portalId ? `/portal/dispatches?portalId=${portalId}` : "#",
-      disabled: !portalId
+      disabled: !portalId || !hasSubscription
     },
     { 
       icon: Settings, 
       label: "Settings", 
-      href: portalId ? `/portal/settings?portalId=${portalId}` : "/settings"
+      href: portalId ? `/portal/settings?portalId=${portalId}` : "/settings",
+      disabled: !hasSubscription
     },
     { 
       icon: Key, 
       label: "API Keys", 
-      href: portalId ? `/api/keys?portalId=${portalId}` : "/api/keys"
+      href: portalId ? `/api/keys?portalId=${portalId}` : "/api/keys",
+      disabled: !hasSubscription
     },
     { 
       icon: Plus, 
       label: "Create Organization", 
-      href: "/create-organization" 
+      href: "/create-organization",
+      disabled: !hasSubscription
     }
   ];
 
@@ -125,6 +161,25 @@ const Sidebar: React.FC<SidebarProps> = ({ openWarehouseConnection, openAppsConn
 
   return (
     <>
+      <Dialog open={showSubscriptionDialog} onOpenChange={setShowSubscriptionDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Subscribe to Access All Features</DialogTitle>
+            <DialogDescription>
+              Unlock all features by subscribing to our service.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4">
+            <button
+              onClick={handleSubscribeClick}
+              className="w-full px-4 py-2 text-white bg-black rounded-lg hover:bg-gray-800"
+            >
+              Subscribe Now
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <button
         className="md:hidden fixed top-4 left-4 z-50 p-2 bg-gray-900 text-white rounded-lg shadow-lg"
         onClick={() => setIsOpen(!isOpen)}
@@ -141,9 +196,38 @@ const Sidebar: React.FC<SidebarProps> = ({ openWarehouseConnection, openAppsConn
           flex flex-col
         `}
       >
+        {/* Rest of the sidebar content remains the same */}
         <div className="flex items-center justify-center px-4 py-4 border-b border-gray-200">
           <Image src="/portcullis.svg" alt="Logo" width={40} height={40} />
         </div>
+
+        <nav className="flex-grow py-4 space-y-1">
+          {menuItems.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              onClick={(e) => {
+                if (item.disabled && !hasSubscription) {
+                  e.preventDefault();
+                  setShowSubscriptionDialog(true);
+                }
+              }}
+              className={`
+                flex items-center px-4 py-3 
+                text-gray-700 hover:bg-gray-100 
+                transition-colors duration-200
+                group
+                ${item.disabled ? "opacity-50 cursor-not-allowed" : ""}
+              `}
+            >
+              <item.icon
+                className="mr-3 text-gray-500 group-hover:text-gray-900"
+                size={20}
+              />
+              <span className="font-medium">{item.label}</span>
+            </Link>
+          ))}
+        </nav>
 
         <nav className="flex-grow py-4 space-y-1">
           {menuItems.map((item) => (

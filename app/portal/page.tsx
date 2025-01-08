@@ -1,21 +1,50 @@
 "use client";
-import React from "react";
+import React, { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Bell, Database, ShieldCheck, TrendingUp } from "lucide-react";
 import { useOrganization, useUser } from "@clerk/nextjs";
 import Link from "next/link";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export default function DashboardPage() {
+  const [showSubscriptionDialog, setShowSubscriptionDialog] = useState(false);
   const searchParams = useSearchParams();
-
-  
   const portalId = searchParams.get("portalId");
+  const { user } = useUser();
+  const { organization } = useOrganization();
+  
+  const firstName = user?.firstName;
+  const org = organization?.name;
+  const logo = organization?.imageUrl;
 
-  const firstName = useUser().user?.firstName;
-  const org = useOrganization().organization?.name;
-  const logo = useOrganization().organization?.imageUrl;
+  const handleSubscribeClick = async () => {
+    try {
+      const response = await fetch('/api/stripe/checkout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          monthlyPrice: 'price_1QeuOWGSPDCwljL797nW2ICm',
+          meteredPrice: 'price_1QeuOWGSPDCwljL7YSHXy2TI',
+          organizationId: organization?.id,
+        }),
+      });
+
+      const { url } = await response.json();
+      window.location.href = url;
+    } catch (error) {
+      console.error('Error creating checkout session:', error);
+    }
+  };
 
   const features = [
     {
@@ -37,6 +66,24 @@ export default function DashboardPage() {
 
   return (
     <div className="container mx-auto p-6 space-y-6 max-h-screen overflow-hidden">
+    <Dialog open={showSubscriptionDialog} onOpenChange={setShowSubscriptionDialog}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Choose Your Subscription Plan</DialogTitle>
+          <DialogDescription>
+            Select a plan to access all features
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4">
+          <button
+            onClick={() => handleSubscribeClick()}
+            className="w-full px-4 py-2 text-white bg-black rounded-lg hover:bg-gray-800"
+          >
+            Subscribe Now
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
       <div className="grid grid-cols-1 pb-4 lg:grid-cols-2 gap-6 h-full">
         {/* Welcome Section */}
         <div className="flex flex-col justify-between space-y-4">
@@ -58,8 +105,11 @@ export default function DashboardPage() {
           </div>
 
           <div className="flex space-x-4">
-            <Button className="bg-black text-[#faff69] hover:bg-gray-800">
-              <Link href={"/warehouses"}>Start Export Setup</Link>
+            <Button 
+              className="bg-black text-[#faff69] hover:bg-gray-800"
+              onClick={() => setShowSubscriptionDialog(true)}
+            >
+              Start Subscription
             </Button>
             <Button variant="outline">View Integrations</Button>
           </div>

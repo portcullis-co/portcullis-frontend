@@ -16,6 +16,8 @@ interface Dispatch {
   progress: number;
   source: string;
   created_at: string;
+  portalId: string;
+  lambda_url: string;
 }
 
 const DispatchesPage = () => {
