@@ -118,12 +118,12 @@ export async function POST(req: Request) {
         const lambdaUrl = urlResponse.FunctionUrl;
 
         const { data: orgData, error: orgError } = await supabase
-          .from('organizations')
-          .insert([
-            { slug, name, stripe_customer_id: stripeCustomer.id, created_by },
-          ])
-          .select('id')
-          .single();
+        .from('organizations')
+        .insert([
+          { id, slug, name, stripe_customer_id: stripeCustomer.id, created_by },
+        ])
+        .single();
+
 
         if (orgError) throw orgError;
 
@@ -131,7 +131,7 @@ export async function POST(req: Request) {
           .from('portals')
           .insert([
             {
-              organization: orgData.id,
+              organization: id,
               api_key: apiKey,
               company: name,
               lambda_url: lambdaUrl,
