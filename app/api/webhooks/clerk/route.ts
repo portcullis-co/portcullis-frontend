@@ -175,25 +175,33 @@ export async function POST(req: Request) {
           last_name, 
           organization_memberships 
         } = evt.data;
-
-        // Insert user into Supabase
-        const { error: userError } = await supabase
-          .from('users')
-          .insert([
-            {
-              id,
-              first_name,
-              last_name,
-              email: email_addresses[0].email_address,
-              organization: organization_memberships?.[0].organization.id,
-              image_url,
-            },
-          ]);
-
-        if (userError) throw userError;
-
-        return new Response(`User ${id} created successfully`, { status: 200 });
-      }
+      
+        // Determine the organization ID (if any)
+        const organizationId = organization_memberships?.[0]?.organization?.id || null;
+      
+        try {
+          // Insert user into Supabase
+          const { error: userError } = await supabase
+            .from('users')
+            .insert([
+              {
+                id,
+                first_name,
+                last_name,
+                email: email_addresses?.[0]?.email_address || null,
+                organization: organizationId, // Handles null or missing organization
+                image_url,
+              },
+            ]);
+      
+          if (userError) throw userError;
+      
+          return new Response(`User ${id} created successfully`, { status: 200 });
+        } catch (error) {
+          console.error('Error inserting user:', error);
+          return new Response('Error inserting user', { status: 500 });
+        }
+      }      
 
       case 'user.updated': {
         const { 
