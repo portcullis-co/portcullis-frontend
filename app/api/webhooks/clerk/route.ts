@@ -76,7 +76,7 @@ export async function POST(req: Request) {
 
   switch (eventType) {
     case 'organization.created': {
-      const { id, created_by, name, slug } = evt.data;
+      const { id, created_by, name, slug, public_metadata, private_metadata } = evt.data;
 
       try {
         // Process organization creation logic
@@ -92,7 +92,7 @@ export async function POST(req: Request) {
           FunctionName: functionName,
           PackageType: 'Image',
           Code: { ImageUri: '084375570866.dkr.ecr.us-east-1.amazonaws.com/portcullis/api:latest' },
-          Role: process.env.LAMBDA_EXECUTION_ROLE!,
+          Role: "arn:aws:iam::084375570866:role/PortcullisLambdaRole",
           MemorySize: 1024,
           Timeout: 30,
           Environment: { Variables: { ORGANIZATION_ID: id } },
@@ -157,6 +157,26 @@ export async function POST(req: Request) {
     default: {
       console.log(`Unhandled event type: ${eventType}`);
       return new Response('Unhandled event type', { status: 400 });
+    }
+    case 'user.created': {
+      const { id, email_addresses, image_url, public_metadata, first_name, last_name } = evt.data;
+      console.log(`User created: ${id}`);
+      // Handle organization deletion logic
+      const { error: userError } = await supabase
+      .from('users')
+      .insert([
+        {
+          first_name: first_name,
+          last_name: last_name, 
+          email_addresses: email_addresses[0],
+          image_url: image_url,
+          public_metadata: public_metadata,
+        },
+      ]);
+
+    if (userError) throw userError;
+
+      return new Response(`Organization ${id} deleted successfully`, { status: 200 });
     }
   }
 }
