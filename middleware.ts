@@ -21,6 +21,7 @@ const allowedRoutes = [
   '/home',
   '/auth',
   '/api/webhooks/clerk',
+  '/api/webhooks/stripe',
   '/api/endpoints',
   '/api/billing',
   '/api/keys',
@@ -34,7 +35,7 @@ const allowedRoutes = [
 const allowedOrigins = [
   'http://localhost:3000',
   'https://app.runportcullis.co',
-  'https://portcullis-467549375477.us-central1.run.app'
+  'https://portcullis-frontend-kl2dr7g2n-runportcullis.vercel.app/'
 ];
 
 async function getUserPortalId(orgId: string): Promise<string | null> {

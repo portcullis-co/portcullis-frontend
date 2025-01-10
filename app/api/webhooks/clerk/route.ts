@@ -34,13 +34,13 @@ const supabase = createClient(
 )
 
 export async function POST(req: Request) {
-  const SIGNING_SECRET = process.env.SIGNING_SECRET;
+  const CLERK_WEBHOOK_SECRET = process.env.CLERK_WEBHOOK_SECRET;
 
-  if (!SIGNING_SECRET) {
-    throw new Error('Error: Please add SIGNING_SECRET from Clerk Dashboard to .env or .env.local');
+  if (!CLERK_WEBHOOK_SECRET) {
+    throw new Error('Error: Please add CLERK_WEBHOOK_SECRET from Clerk Dashboard to .env or .env.local');
   }
 
-  const wh = new Webhook(SIGNING_SECRET);
+  const wh = new Webhook(CLERK_WEBHOOK_SECRET);
 
   // Get headers
   const headerPayload = await headers();
