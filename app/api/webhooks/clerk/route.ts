@@ -10,7 +10,8 @@ import {
   LambdaClient, 
   CreateFunctionCommand,
   CreateFunctionCommandInput,
-  CreateFunctionUrlConfigCommand
+  CreateFunctionUrlConfigCommand,
+  DeleteFunctionCommand
 } from '@aws-sdk/client-lambda'
 
 // Initialize Stripe
@@ -74,11 +75,11 @@ export async function POST(req: Request) {
 
   const eventType = evt.type;
 
-  switch (eventType) {
-    case 'organization.created': {
-      const { id, created_by, name, slug, public_metadata, private_metadata } = evt.data;
+  try {
+    switch (eventType) {
+      case 'organization.created': {
+        const { id, created_by, name, slug } = evt.data;
 
-      try {
         // Process organization creation logic
         const stripeCustomer = await stripe.customers.create({
           name: name,
@@ -140,43 +141,125 @@ export async function POST(req: Request) {
         if (portalError) throw portalError;
 
         return new Response('Organization created successfully', { status: 200 });
-      } catch (error) {
-        console.error('Error processing organization creation:', error);
-        return new Response(
-          'Error processing organization creation',
-          { status: 500, statusText: error instanceof Error ? error.message : 'Unknown error' }
-        );
+      }
+
+      case 'organization.deleted': {
+        const { id } = evt.data;
+        
+        // Clean up associated resources
+        try {
+          // Delete Lambda function
+          await lambda.send(new DeleteFunctionCommand({ FunctionName: `${id}-runners` }));
+          
+          // Delete from Supabase
+          const { error: deleteError } = await supabase
+            .from('organizations')
+            .delete()
+            .match({ id });
+            
+          if (deleteError) throw deleteError;
+          
+          return new Response(`Organization ${id} deleted successfully`, { status: 200 });
+        } catch (error) {
+          console.error('Error deleting organization:', error);
+          throw error;
+        }
+      }
+
+      case 'user.created': {
+        const { 
+          id, 
+          email_addresses, 
+          image_url, 
+          first_name, 
+          last_name, 
+          organization_memberships 
+        } = evt.data;
+
+        // Insert user into Supabase
+        const { error: userError } = await supabase
+          .from('users')
+          .insert([
+            {
+              id,
+              first_name,
+              last_name,
+              email: email_addresses[0].email_address,
+              organization_id: organization_memberships?.[0].organization.id,
+              image_url,
+            },
+          ]);
+
+        if (userError) throw userError;
+
+        return new Response(`User ${id} created successfully`, { status: 200 });
+      }
+
+      case 'user.updated': {
+        const { 
+          id, 
+          email_addresses, 
+          image_url, 
+          first_name, 
+          last_name, 
+          organization_memberships 
+        } = evt.data;
+
+        // Update user in Supabase
+        const { error: updateError } = await supabase
+          .from('users')
+          .update({
+            first_name,
+            last_name,
+            email: email_addresses[0].email_address,
+            organization_id: organization_memberships?.[0].organization.id,
+            image_url,
+          })
+          .match({ id });
+
+        if (updateError) throw updateError;
+
+        return new Response(`User ${id} updated successfully`, { status: 200 });
+      }
+
+      case 'user.deleted': {
+        const { id } = evt.data;
+
+        // Delete user from Supabase
+        const { error: deleteError } = await supabase
+          .from('users')
+          .delete()
+          .match({ id });
+
+        if (deleteError) throw deleteError;
+
+        return new Response(`User ${id} deleted successfully`, { status: 200 });
+      }
+
+      case 'organization.updated': {
+        const { id, name, slug } = evt.data;
+
+        // Update organization in Supabase
+        const { error: updateError } = await supabase
+          .from('organizations')
+          .update({ name, slug })
+          .match({ id });
+
+        if (updateError) throw updateError;
+
+        return new Response(`Organization ${id} updated successfully`, { status: 200 });
+      }
+
+      default: {
+        console.log(`Unhandled event type: ${eventType}`);
+        return new Response(`Unhandled webhook event type: ${eventType}`, { status: 400 });
       }
     }
-    case 'organization.deleted': {
-      const { id } = evt.data;
-      console.log(`Organization deleted: ${id}`);
-      // Handle organization deletion logic
-      return new Response(`Organization ${id} deleted successfully`, { status: 200 });
-    }
-    default: {
-      console.log(`Unhandled event type: ${eventType}`);
-      return new Response('Unhandled event type', { status: 400 });
-    }
-    case 'user.created': {
-      const { id, email_addresses, image_url, public_metadata, first_name, last_name } = evt.data;
-      console.log(`User created: ${id}`);
-      // Handle organization deletion logic
-      const { error: userError } = await supabase
-      .from('users')
-      .insert([
-        {
-          first_name: first_name,
-          last_name: last_name, 
-          email_addresses: email_addresses[0],
-          image_url: image_url,
-          public_metadata: public_metadata,
-        },
-      ]);
-
-    if (userError) throw userError;
-
-      return new Response(`Organization ${id} deleted successfully`, { status: 200 });
-    }
+  } catch (error) {
+    console.error(`Error processing ${eventType} event:`, error);
+    return new Response(
+      `Error processing ${eventType} event`,
+      { status: 500, statusText: error instanceof Error ? error.message : 'Unknown error' }
+    );
   }
 }
