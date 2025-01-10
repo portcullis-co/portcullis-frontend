@@ -1,6 +1,5 @@
 "use client"
 import React from 'react'
-import { TableComponent } from '@/components/v0-table-component'
 import Sidebar from '@/components/dashboard/sidebar'
 import Header from '@/components/dashboard/header'
 import { ReactNode } from 'react';

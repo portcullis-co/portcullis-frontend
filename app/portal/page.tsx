@@ -6,13 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Bell, Database, ShieldCheck, TrendingUp } from "lucide-react";
 import { useOrganization, useUser } from "@clerk/nextjs";
 import Link from "next/link";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import SubscriptionDialog from "@/components/subscription-dialog"
 
 export default function DashboardPage() {
   const [showSubscriptionDialog, setShowSubscriptionDialog] = useState(false);
@@ -33,8 +27,7 @@ export default function DashboardPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          monthlyPrice: 'price_1QeuOWGSPDCwljL797nW2ICm',
-          meteredPrice: 'price_1QeuOWGSPDCwljL7YSHXy2TI',
+          meteredPrice: 'price_1QfGitGSPDCwljL7WaxYfMF8',
           organizationId: organization?.id,
         }),
       });
@@ -66,24 +59,11 @@ export default function DashboardPage() {
 
   return (
     <div className="container mx-auto p-6 space-y-6 max-h-screen overflow-hidden">
-    <Dialog open={showSubscriptionDialog} onOpenChange={setShowSubscriptionDialog}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Choose Your Subscription Plan</DialogTitle>
-          <DialogDescription>
-            Select a plan to access all features
-          </DialogDescription>
-        </DialogHeader>
-        <div className="grid gap-4">
-          <button
-            onClick={() => handleSubscribeClick()}
-            className="w-full px-4 py-2 text-white bg-black rounded-lg hover:bg-gray-800"
-          >
-            Subscribe Now
-          </button>
-        </div>
-      </DialogContent>
-    </Dialog>
+    <SubscriptionDialog 
+      open={showSubscriptionDialog} 
+      onOpenChange={setShowSubscriptionDialog}
+      organizationId={organization?.id}
+    />
       <div className="grid grid-cols-1 pb-4 lg:grid-cols-2 gap-6 h-full">
         {/* Welcome Section */}
         <div className="flex flex-col justify-between space-y-4">
