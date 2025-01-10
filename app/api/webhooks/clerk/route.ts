@@ -78,7 +78,7 @@ export async function POST(req: Request) {
   try {
     switch (eventType) {
       case 'organization.created': {
-        const { id, created_by, name, slug } = evt.data;
+        const { id, created_by, name, slug, } = evt.data;
 
         // Process organization creation logic
         const stripeCustomer = await stripe.customers.create({
@@ -170,15 +170,12 @@ export async function POST(req: Request) {
         const { 
           id, 
           email_addresses, 
-          image_url, 
+          image_url,
           first_name, 
           last_name, 
-          organization_memberships 
         } = evt.data;
       
-        // Determine the organization ID (if any)
-        const organizationId = organization_memberships?.[0]?.organization?.id || null;
-      
+        // Determine the organization ID (if any)      
         try {
           // Insert user into Supabase
           const { error: userError } = await supabase
@@ -189,7 +186,6 @@ export async function POST(req: Request) {
                 first_name,
                 last_name,
                 email: email_addresses?.[0]?.email_address || null,
-                organization: organizationId, // Handles null or missing organization
                 image_url,
               },
             ]);
@@ -208,9 +204,8 @@ export async function POST(req: Request) {
           id, 
           email_addresses, 
           image_url, 
-          first_name, 
+          first_name,
           last_name, 
-          organization_memberships 
         } = evt.data;
 
         // Update user in Supabase
@@ -220,7 +215,6 @@ export async function POST(req: Request) {
             first_name,
             last_name,
             email: email_addresses[0].email_address,
-            organization: organization_memberships?.[0].organization.id,
             image_url,
           })
           .match({ id });
