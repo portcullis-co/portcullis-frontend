@@ -34,13 +34,13 @@ const supabase = createClient(
 )
 
 export async function POST(req: Request) {
-  const CLERK_WEBHOOK_SECRET = process.env.CLERK_WEBHOOK_SECRET;
+  const SIGNING_SECRET = process.env.SIGNING_SECRET;
 
-  if (!CLERK_WEBHOOK_SECRET) {
-    throw new Error('Error: Please add CLERK_WEBHOOK_SECRET from Clerk Dashboard to .env or .env.local');
+  if (!SIGNING_SECRET) {
+    throw new Error('Error: Please add SIGNING_SECRET from Clerk Dashboard to .env or .env.local');
   }
 
-  const wh = new Webhook(CLERK_WEBHOOK_SECRET);
+  const wh = new Webhook(SIGNING_SECRET);
 
   // Get headers
   const headerPayload = await headers();
@@ -56,6 +56,7 @@ export async function POST(req: Request) {
 
   const payload = await req.json();
   const body = JSON.stringify(payload);
+  const { eventType, data } = payload;
 
   let evt: WebhookEvent
   
@@ -72,7 +73,6 @@ export async function POST(req: Request) {
     });
   }
 
-  const { eventType, data } = await req.json();
   switch (eventType) {
     case 'organization.created': {
       const { id, created_by, name, slug } = data
