@@ -57,8 +57,8 @@ export async function POST(req: Request) {
   const payload = await req.json();
   const body = JSON.stringify(payload);
 
-  let evt: WebhookEvent
-  
+  let evt: WebhookEvent;
+
   try {
     evt = wh.verify(body, {
       'svix-id': svix_id,
@@ -71,79 +71,61 @@ export async function POST(req: Request) {
       status: 400,
     });
   }
-  const eventType = evt.type
+
+  const eventType = evt.type;
+
   switch (eventType) {
     case 'organization.created': {
-      const { id, created_by, name, slug } = evt.data
-      
+      const { id, created_by, name, slug } = evt.data;
+
       try {
-        // 1. Create Stripe customer
+        // Process organization creation logic
         const stripeCustomer = await stripe.customers.create({
           name: name,
-          metadata: {
-            organizationId: id
-          }
-        })
+          metadata: { organizationId: id },
+        });
 
-        // 2. Generate API Key
-        const apiKey = await generateApiKey(id)
+        const apiKey = await generateApiKey(id);
 
-        // 3. Create AWS Lambda function
-        const functionName = `${id}-runners`
+        const functionName = `${id}-runners`;
         const lambdaParams = {
           FunctionName: functionName,
           PackageType: 'Image',
-          Code: {
-            ImageUri: '084375570866.dkr.ecr.us-east-1.amazonaws.com/portcullis/api:latest'
-          },
+          Code: { ImageUri: '084375570866.dkr.ecr.us-east-1.amazonaws.com/portcullis/api:latest' },
           Role: process.env.LAMBDA_EXECUTION_ROLE!,
           MemorySize: 1024,
           Timeout: 30,
-          Environment: {
-            Variables: {
-              ORGANIZATION_ID: id
-            }
-          }
-        }
+          Environment: { Variables: { ORGANIZATION_ID: id } },
+        };
 
-        // Create the Lambda function
-        const createFunctionCommand = new CreateFunctionCommand(lambdaParams as CreateFunctionCommandInput)
-        await lambda.send(createFunctionCommand)
+        const createFunctionCommand = new CreateFunctionCommand(lambdaParams as CreateFunctionCommandInput);
+        await lambda.send(createFunctionCommand);
 
-        // Create function URL configuration
         const urlConfig = new CreateFunctionUrlConfigCommand({
           FunctionName: functionName,
-          AuthType: 'NONE', // This makes it publicly accessible
+          AuthType: 'NONE',
           Cors: {
             AllowCredentials: true,
             AllowHeaders: ['*'],
             AllowMethods: ['*'],
             AllowOrigins: ['*'],
-            MaxAge: 86400
-          }
-        })
+            MaxAge: 86400,
+          },
+        });
 
-        // Create the function URL
-        const urlResponse = await lambda.send(urlConfig)
-        const lambdaUrl = urlResponse.FunctionUrl // This will be the public URL
+        const urlResponse = await lambda.send(urlConfig);
+        const lambdaUrl = urlResponse.FunctionUrl;
 
-        // 4. Insert into Supabase Organizations table
         const { data: orgData, error: orgError } = await supabase
           .from('organizations')
           .insert([
-            {
-              slug: slug,
-              name: name,
-              stripe_customer_id: stripeCustomer.id,
-              created_by
-            }
+            { slug, name, stripe_customer_id: stripeCustomer.id, created_by },
           ])
           .select('id')
-          .single()
+          .single();
 
-        if (orgError) throw orgError
+        if (orgError) throw orgError;
 
-        // 5. Insert into Supabase Portals table
         const { error: portalError } = await supabase
           .from('portals')
           .insert([
@@ -151,32 +133,30 @@ export async function POST(req: Request) {
               organization: orgData.id,
               api_key: apiKey,
               company: name,
-              lambda_url: lambdaUrl // Now using the actual function URL instead of ARN
-            }
-          ])
+              lambda_url: lambdaUrl,
+            },
+          ]);
 
-        if (portalError) throw portalError
+        if (portalError) throw portalError;
 
-        return new Response('Organization created successfully', { status: 200 })
+        return new Response('Organization created successfully', { status: 200 });
       } catch (error) {
-        console.error('Error processing organization creation:', error)
-        return new Response('Error processing organization creation', { 
-          status: 500,
-          statusText: error instanceof Error ? error.message : 'Unknown error'
-        })
+        console.error('Error processing organization creation:', error);
+        return new Response(
+          'Error processing organization creation',
+          { status: 500, statusText: error instanceof Error ? error.message : 'Unknown error' }
+        );
       }
     }
     case 'organization.deleted': {
       const { id } = evt.data;
       console.log(`Organization deleted: ${id}`);
-      // Handle organization deletion
-      break;
+      // Handle organization deletion logic
+      return new Response(`Organization ${id} deleted successfully`, { status: 200 });
     }
-
-    default:
+    default: {
       console.log(`Unhandled event type: ${eventType}`);
-      break;
-
-    // ... rest of the switch case remains the same ...
+      return new Response('Unhandled event type', { status: 400 });
+    }
   }
 }
