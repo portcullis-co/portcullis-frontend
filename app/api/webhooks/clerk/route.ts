@@ -185,7 +185,7 @@ export async function POST(req: Request) {
               first_name,
               last_name,
               email: email_addresses[0].email_address,
-              organization_id: organization_memberships?.[0].organization.id,
+              organization: organization_memberships?.[0].organization.id,
               image_url,
             },
           ]);
@@ -212,7 +212,7 @@ export async function POST(req: Request) {
             first_name,
             last_name,
             email: email_addresses[0].email_address,
-            organization_id: organization_memberships?.[0].organization.id,
+            organization: organization_memberships?.[0].organization.id,
             image_url,
           })
           .match({ id });
