@@ -1,5 +1,3 @@
-"use client";
-
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
@@ -13,9 +11,7 @@ import {
   Building,
   Menu,
   X,
-  Key,
-  Plus,
-  DatabaseZap
+  DatabaseZap,
 } from "lucide-react";
 import {
   Dialog,
@@ -38,12 +34,7 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
 );
 
-interface SidebarProps {
-  openWarehouseConnection: () => void;
-  openAppsConnection: () => void;
-}
-
-const Sidebar: React.FC<SidebarProps> = ({ openWarehouseConnection, openAppsConnection }) => {
+const Sidebar: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [organizationId, setOrganizationId] = useState<string | null>(null);
   const [portalId, setPortalId] = useState<string | null>(null);
@@ -68,27 +59,28 @@ const Sidebar: React.FC<SidebarProps> = ({ openWarehouseConnection, openAppsConn
       }
 
       try {
-        // Fetch the subscription from the subscriptions table
-        const { data, error } = await supabase
+        const { data: subscriptionData, error: subscriptionError } = await supabase
           .from("subscriptions")
           .select("status")
           .eq("organization", organization.id)
           .single();
 
-        if (error) {
-          console.error("Error fetching subscription data:", error);
+        if (subscriptionError) {
+          console.error("Error fetching subscription data:", subscriptionError);
         } else {
-          setHasSubscription(data?.status === "active"); // Check if status is 'active'
+          setHasSubscription(subscriptionData?.status === "active");
         }
 
-        const portalData = await supabase
+        const { data: portalData, error: portalError } = await supabase
           .from("portals")
           .select("id")
           .eq("organization", organization.id)
-          .single();
+          .maybeSingle();
 
-        if (portalData.data) {
-          setPortalId(portalData.data.id);
+        if (portalError) {
+          console.error("Error fetching portal data:", portalError);
+        } else if (portalData) {
+          setPortalId(portalData.id);
         }
 
         setOrganizationId(organization.id);
@@ -104,25 +96,25 @@ const Sidebar: React.FC<SidebarProps> = ({ openWarehouseConnection, openAppsConn
 
   const handleSubscribeClick = async () => {
     try {
-      const response = await fetch('/api/stripe/checkout', {
-        method: 'POST',
+      const response = await fetch("/api/stripe/checkout", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          meteredPrice: 'price_1QfGitGSPDCwljL7WaxYfMF8',
+          meteredPrice: "price_1QfGitGSPDCwljL7WaxYfMF8",
           organizationId: organization?.id,
         }),
       });
 
       const { url } = await response.json();
       if (url) {
-        window.location.href = url; // Redirect to Stripe checkout
+        window.location.href = url;
       } else {
-        console.error('URL not returned from server');
+        console.error("URL not returned from server");
       }
     } catch (error) {
-      console.error('Error creating checkout session:', error);
+      console.error("Error creating checkout session:", error);
     }
   };
 
@@ -131,24 +123,31 @@ const Sidebar: React.FC<SidebarProps> = ({ openWarehouseConnection, openAppsConn
       icon: Home, 
       label: "Home", 
       href: `/portal?portalId=${portalId}`,
+      requiresSubscription: false
     },
-    { 
-      icon: DatabaseZap, 
-      label: "Dispatches", 
-      href: portalId ? `/portal/dispatches?portalId=${portalId}` : "#",
-      disabled: !portalId || !hasSubscription
+    {
+      icon: DatabaseZap,
+      label: "Dispatches",
+      href: `/portal/dispatches?portalId=${portalId}`,
+      requiresSubscription: true
     },
-    { 
-      icon: Settings, 
-      label: "Settings", 
+    {
+      icon: Settings,
+      label: "Settings",
       href: portalId ? `/portal/settings?portalId=${portalId}` : "/settings",
-      disabled: !hasSubscription
+      requiresSubscription: true
     },
   ];
 
   if (isLoading) {
     return <div className="flex items-center justify-center h-screen">Loading...</div>;
   }
+
+  const isItemDisabled = (requiresSubscription: boolean) => {
+    if (!requiresSubscription) return false;
+    if (!portalId) return true;
+    return !hasSubscription;
+  };
 
   return (
     <>
@@ -192,31 +191,34 @@ const Sidebar: React.FC<SidebarProps> = ({ openWarehouseConnection, openAppsConn
         </div>
 
         <nav className="flex-1 py-2">
-          {menuItems.map((item) => (
-            <Link
-              key={item.href}
-              href={item.disabled ? "#" : item.href}
-              onClick={(e) => {
-                if (item.disabled && !hasSubscription) {
-                  e.preventDefault();
-                  setShowSubscriptionDialog(true);
-                }
-              }}
-              className={`
-                flex items-center px-4 py-2 
-                text-gray-700 hover:bg-gray-100 
-                transition-colors duration-200
-                group
-                ${item.disabled ? "opacity-50 cursor-not-allowed" : ""}
-              `}
-            >
-              <item.icon
-                className="mr-3 text-gray-500 group-hover:text-gray-900"
-                size={18}
-              />
-              <span className="text-sm font-medium">{item.label}</span>
-            </Link>
-          ))}
+          {menuItems.map((item) => {
+            const disabled = isItemDisabled(item.requiresSubscription);
+            return (
+              <Link
+                key={item.href}
+                href={disabled ? "#" : item.href}
+                onClick={(e) => {
+                  if (disabled) {
+                    e.preventDefault();
+                    setShowSubscriptionDialog(true);
+                  }
+                }}
+                className={`
+                  flex items-center px-4 py-2 
+                  text-gray-700 hover:bg-gray-100 
+                  transition-colors duration-200
+                  group
+                  ${disabled ? "opacity-50 cursor-not-allowed" : ""}
+                `}
+              >
+                <item.icon
+                  className="mr-3 text-gray-500 group-hover:text-gray-900"
+                  size={18}
+                />
+                <span className="text-sm font-medium">{item.label}</span>
+              </Link>
+            );
+          })}
         </nav>
 
         <DropdownMenu>

@@ -42,9 +42,9 @@ export async function GET(request: Request) {
   if (organizationId) {
     try {
       const { data: api_key, error } = await supabase // TODO: Maybe use RDS instead
-        .from('organizations')
+        .from('portals')
         .select('api_key')
-        .eq('id', organizationId);
+        .eq('organization', organizationId);
 
       if (error) {
         return NextResponse.json({ error: error.message }, { status: 500 });

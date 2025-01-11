@@ -82,7 +82,7 @@ export async function POST(req: Request) {
 
         const apiKey = await generateApiKey(id);
 
-        const functionName = `${id}-runners`;
+        const functionName = `${name}-runners`;
         const lambdaParams = {
           FunctionName: functionName,
           PackageType: 'Image',

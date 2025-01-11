@@ -11,7 +11,7 @@ interface LayoutProps {
 export default function Layout({ children }: LayoutProps) {
   return (
     <div className="flex flex-col md:flex-row min-h-screen bg-white">
-      <Sidebar openWarehouseConnection={() => {}} openAppsConnection={() => {}} />
+      <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header />
         <main className="flex-1 overflow-x-hidden overflow-y-auto bg-white p-4 md:p-6">
