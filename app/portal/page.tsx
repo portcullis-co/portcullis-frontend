@@ -9,7 +9,6 @@ import Link from "next/link";
 import SubscriptionDialog from "@/components/subscription-dialog"
 
 export default function DashboardPage() {
-  const [showSubscriptionDialog, setShowSubscriptionDialog] = useState(false);
   const searchParams = useSearchParams();
   const portalId = searchParams.get("portalId");
   const { user } = useUser();
@@ -31,13 +30,17 @@ export default function DashboardPage() {
           organizationId: organization?.id,
         }),
       });
-
+  
       const { url } = await response.json();
-      window.location.href = url;
+      if (url) {
+        window.location.href = url; // Redirect to Stripe checkout
+      } else {
+        console.error('URL not returned from server');
+      }
     } catch (error) {
       console.error('Error creating checkout session:', error);
     }
-  };
+  };  
 
   const features = [
     {
@@ -59,11 +62,6 @@ export default function DashboardPage() {
 
   return (
     <div className="container mx-auto p-6 space-y-6 max-h-screen overflow-hidden">
-    <SubscriptionDialog 
-      open={showSubscriptionDialog} 
-      onOpenChange={setShowSubscriptionDialog}
-      organizationId={organization?.id}
-    />
       <div className="grid grid-cols-1 pb-4 lg:grid-cols-2 gap-6 h-full">
         {/* Welcome Section */}
         <div className="flex flex-col justify-between space-y-4">
@@ -87,7 +85,7 @@ export default function DashboardPage() {
           <div className="flex space-x-4">
             <Button 
               className="bg-black text-[#faff69] hover:bg-gray-800"
-              onClick={() => setShowSubscriptionDialog(true)}
+              onClick={handleSubscribeClick}
             >
               Start Subscription
             </Button>

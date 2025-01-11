@@ -10,7 +10,6 @@ export async function POST(req: Request) {
     const { meteredPrice, organizationId } = await req.json();
 
     const session = await stripe.checkout.sessions.create({
-      ui_mode: 'embedded',
       mode: 'subscription',
       payment_method_types: ['card'],
       line_items: [
@@ -18,14 +17,16 @@ export async function POST(req: Request) {
           price: meteredPrice,
         },
       ],
-      return_url: `${process.env.NEXT_PUBLIC_BASE_URL}/return?session_id={CHECKOUT_SESSION_ID}`,
+      success_url: "http://localhost:3000/success/",
+      cancel_url: "http://localhost:3000/cancel/",
       automatic_tax: { enabled: true },
       metadata: {
         organizationId,
       },
     });
 
-    return NextResponse.json({ clientSecret: session.client_secret });
+    // Return the URL for redirect
+    return NextResponse.json({ url: session.url });
   } catch (error) {
     console.error('Error creating checkout session:', error);
     return NextResponse.json(

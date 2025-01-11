@@ -61,23 +61,24 @@ const Sidebar: React.FC<SidebarProps> = ({ openWarehouseConnection, openAppsConn
   const userImage = user?.imageUrl;
 
   useEffect(() => {
-    const fetchOrganizationData = async () => {
+    const fetchSubscriptionData = async () => {
       if (!organization?.id) {
         setIsLoading(false);
         return;
       }
 
       try {
+        // Fetch the subscription from the subscriptions table
         const { data, error } = await supabase
-          .from("organizations")
-          .select("stripe_customer_id, has_active_subscription")
-          .eq("id", organization.id)
+          .from("subscriptions")
+          .select("status")
+          .eq("organization", organization.id)
           .single();
 
         if (error) {
-          console.error("Error fetching organization data:", error);
+          console.error("Error fetching subscription data:", error);
         } else {
-          setHasSubscription(data?.has_active_subscription || false);
+          setHasSubscription(data?.status === "active"); // Check if status is 'active'
         }
 
         const portalData = await supabase
@@ -92,13 +93,13 @@ const Sidebar: React.FC<SidebarProps> = ({ openWarehouseConnection, openAppsConn
 
         setOrganizationId(organization.id);
       } catch (error) {
-        console.error("Error in fetchOrganizationData:", error);
+        console.error("Error in fetchSubscriptionData:", error);
       }
 
       setIsLoading(false);
     };
 
-    fetchOrganizationData();
+    fetchSubscriptionData();
   }, [organization?.id]);
 
   const handleSubscribeClick = async () => {
@@ -109,14 +110,17 @@ const Sidebar: React.FC<SidebarProps> = ({ openWarehouseConnection, openAppsConn
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          monthlyPrice: 'price_1QeuOWGSPDCwljL797nW2ICm',
-          meteredPrice: 'price_1QeuOWGSPDCwljL7YSHXy2TI',
+          meteredPrice: 'price_1QfGitGSPDCwljL7WaxYfMF8',
           organizationId: organization?.id,
         }),
       });
 
       const { url } = await response.json();
-      window.location.href = url;
+      if (url) {
+        window.location.href = url; // Redirect to Stripe checkout
+      } else {
+        console.error('URL not returned from server');
+      }
     } catch (error) {
       console.error('Error creating checkout session:', error);
     }
@@ -126,8 +130,7 @@ const Sidebar: React.FC<SidebarProps> = ({ openWarehouseConnection, openAppsConn
     { 
       icon: Home, 
       label: "Home", 
-      href: portalId ? `/portal?portalId=${portalId}` : "#",
-      disabled: !portalId
+      href: `/portal?portalId=${portalId}`,
     },
     { 
       icon: DatabaseZap, 
@@ -141,18 +144,6 @@ const Sidebar: React.FC<SidebarProps> = ({ openWarehouseConnection, openAppsConn
       href: portalId ? `/portal/settings?portalId=${portalId}` : "/settings",
       disabled: !hasSubscription
     },
-    { 
-      icon: Key, 
-      label: "API Keys", 
-      href: portalId ? `/api/keys?portalId=${portalId}` : "/api/keys",
-      disabled: !hasSubscription
-    },
-    { 
-      icon: Plus, 
-      label: "Create Organization", 
-      href: "/create-organization",
-      disabled: !hasSubscription
-    }
   ];
 
   if (isLoading) {
@@ -189,23 +180,22 @@ const Sidebar: React.FC<SidebarProps> = ({ openWarehouseConnection, openAppsConn
 
       <div
         className={`
-          fixed inset-y-0 left-0 z-40 w-72 bg-white border-r border-gray-200
+          fixed inset-y-0 left-0 z-40 w-64 bg-white border-r border-gray-200
           transform transition-transform duration-300 ease-in-out
           ${isOpen ? "translate-x-0" : "-translate-x-full"} 
           md:relative md:translate-x-0
-          flex flex-col
+          flex flex-col h-screen
         `}
       >
-        {/* Rest of the sidebar content remains the same */}
-        <div className="flex items-center justify-center px-4 py-4 border-b border-gray-200">
-          <Image src="/portcullis.svg" alt="Logo" width={40} height={40} />
+        <div className="flex items-center justify-center h-14 px-4 border-b border-gray-200">
+          <Image src="/portcullis.svg" alt="Logo" width={32} height={32} />
         </div>
 
-        <nav className="flex-grow py-4 space-y-1">
+        <nav className="flex-1 py-2">
           {menuItems.map((item) => (
             <Link
               key={item.href}
-              href={item.href}
+              href={item.disabled ? "#" : item.href}
               onClick={(e) => {
                 if (item.disabled && !hasSubscription) {
                   e.preventDefault();
@@ -213,7 +203,7 @@ const Sidebar: React.FC<SidebarProps> = ({ openWarehouseConnection, openAppsConn
                 }
               }}
               className={`
-                flex items-center px-4 py-3 
+                flex items-center px-4 py-2 
                 text-gray-700 hover:bg-gray-100 
                 transition-colors duration-200
                 group
@@ -222,31 +212,9 @@ const Sidebar: React.FC<SidebarProps> = ({ openWarehouseConnection, openAppsConn
             >
               <item.icon
                 className="mr-3 text-gray-500 group-hover:text-gray-900"
-                size={20}
+                size={18}
               />
-              <span className="font-medium">{item.label}</span>
-            </Link>
-          ))}
-        </nav>
-
-        <nav className="flex-grow py-4 space-y-1">
-          {menuItems.map((item) => (
-            <Link
-              key={item.href}
-              href={item.disabled ? "#" : item.href}
-              className={`
-                flex items-center px-4 py-3 
-                text-gray-700 hover:bg-gray-100 
-                transition-colors duration-200
-                group
-                ${(item.disabled || item.href === "#") ? "opacity-50 cursor-not-allowed" : ""}
-              `}
-            >
-              <item.icon
-                className="mr-3 text-gray-500 group-hover:text-gray-900"
-                size={20}
-              />
-              <span className="font-medium">{item.label}</span>
+              <span className="text-sm font-medium">{item.label}</span>
             </Link>
           ))}
         </nav>
@@ -255,24 +223,21 @@ const Sidebar: React.FC<SidebarProps> = ({ openWarehouseConnection, openAppsConn
           <DropdownMenuTrigger asChild>
             <div
               className="
-                flex items-center justify-between 
-                px-4 py-4 border-t border-gray-200 
-                cursor-pointer hover:bg-gray-50
+                flex items-center px-3 py-2 border-t border-gray-200 
+                cursor-pointer hover:bg-gray-50 h-14
               "
             >
-              <div className="flex items-center space-x-3">
-                <Avatar className="h-10 w-10">
-                  <AvatarImage src={userImage} />
-                  <AvatarFallback>{userInitials}</AvatarFallback>
-                </Avatar>
-                <div className="flex flex-col">
-                  <span className="font-semibold text-gray-800">
-                    {firstName} {lastName}
-                  </span>
-                  <span className="text-xs text-gray-500">
-                    {user?.primaryEmailAddress?.emailAddress}
-                  </span>
-                </div>
+              <Avatar className="h-8 w-8">
+                <AvatarImage src={userImage} />
+                <AvatarFallback>{userInitials}</AvatarFallback>
+              </Avatar>
+              <div className="ml-2 flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-800 truncate">
+                  {firstName} {lastName}
+                </p>
+                <p className="text-xs text-gray-500 truncate">
+                  {user?.primaryEmailAddress?.emailAddress}
+                </p>
               </div>
             </div>
           </DropdownMenuTrigger>

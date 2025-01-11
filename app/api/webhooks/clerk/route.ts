@@ -80,12 +80,6 @@ export async function POST(req: Request) {
       case 'organization.created': {
         const { id, created_by, name, slug, } = evt.data;
 
-        // Process organization creation logic
-        const stripeCustomer = await stripe.customers.create({
-          name: name,
-          metadata: { organizationId: id },
-        });
-
         const apiKey = await generateApiKey(id);
 
         const functionName = `${id}-runners`;
@@ -120,7 +114,7 @@ export async function POST(req: Request) {
         const { data: orgData, error: orgError } = await supabase
         .from('organizations')
         .insert([
-          { id, slug, name, stripe_customer_id: stripeCustomer.id, created_by },
+          { id, slug, name, created_by },
         ])
         .single();
 
@@ -133,6 +127,7 @@ export async function POST(req: Request) {
             {
               organization: id,
               api_key: apiKey,
+              slug: slug,
               company: name,
               lambda_url: lambdaUrl,
             },

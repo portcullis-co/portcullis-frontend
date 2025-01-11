@@ -35,28 +35,23 @@ export async function POST(req: Request) {
         const organizationId = subscription.metadata.organizationId;
 
         await supabase
-          .from('organizations')
-          .update({ 
-            has_active_subscription: true,
-            subscription_id: subscription.id,
-            subscription_status: subscription.status
+          .from('subscriptions')
+          .insert({ 
+            id: subscription.id,
+            organization: organizationId,
+            days_until_due: subscription.days_until_due,
+            status: subscription.status,
+            customer: subscription.customer,
           })
-          .eq('id', organizationId);
         break;
 
-      case 'customer.subscription.deleted':
-        const deletedSubscription = event.data.object as Stripe.Subscription;
-        const orgId = deletedSubscription.metadata.organizationId;
-
-        await supabase
-          .from('organizations')
-          .update({ 
-            has_active_subscription: false,
-            subscription_id: null,
-            subscription_status: 'canceled'
-          })
-          .eq('id', orgId);
-        break;
+        case 'customer.subscription.deleted':
+          const deletedSubscription = event.data.object as Stripe.Subscription;
+          await supabase
+              .from('subscriptions')
+              .delete()
+              .eq('id', deletedSubscription.id);
+          break;
     }
 
     return NextResponse.json({ received: true });
