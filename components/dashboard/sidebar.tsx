@@ -187,7 +187,7 @@ const Sidebar: React.FC = () => {
         `}
       >
         <div className="flex items-center justify-center h-14 px-4 border-b border-gray-200">
-          <Image src="/portcullis.svg" alt="Logo" width={32} height={32} />
+          <Image src="/dispatch.png" className="rounded-full" alt="Logo" width={35} height={35} />
         </div>
 
         <nav className="flex-1 py-2">
