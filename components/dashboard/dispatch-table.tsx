@@ -86,30 +86,31 @@ const ProgressBar: React.FC<ProgressBarProps> = ({ progress }) => (
 
 // Source icon component
 const SourceIcon: React.FC<SourceIconProps> = ({ source }) => {
-  const getSourceSvg = () => {
+  const getSourceImageUrl = () => {
     switch (source.toLowerCase()) {
       case 'clickhouse':
-        return (
-          <svg viewBox="0 0 24 24" className="w-6 h-6">
-            <path fill="#FFCC01" d="M3,3 L21,3 L21,21 L3,21 L3,3 Z M6,6 L6,18 L18,18 L18,6 L6,6 Z" />
-            <rect fill="#FFCC01" x="9" y="9" width="6" height="6" />
-          </svg>
-        );
+        return 'https://cdn.brandfetch.io/idnezyZEJm/theme/dark/symbol.svg?c=1dxbfHSJFAPEGdCLU4o5B';
       case 'redshift':
-        return (
-          <svg viewBox="0 0 24 24" className="w-6 h-6">
-            <path fill="#205B97" d="M12,2 L22,7 L22,17 L12,22 L2,17 L2,7 L12,2 Z" />
-          </svg>
-        );
+        return 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/73/Amazon-Redshift-Logo.svg/1862px-Amazon-Redshift-Logo.svg.png';
+      case 'postgres':
+        return 'https://cdn.brandfetch.io/idjSeCeMle/w/820/h/845/theme/dark/logo.png?c=1dxbfHSJFAPEGdCLU4o5B';
+      case 'snowflake':
+        return 'https://cdn.brandfetch.io/idJz-fGD_q/theme/dark/symbol.svg?c=1dxbfHSJFAPEGdCLU4o5B';
+      case 'mysql':
+        return 'https://cdn.brandfetch.io/idBdG8DdKe/theme/dark/logo.svg?c=1dxbfHSJFAPEGdCLU4o5B';
       default:
-        return <div className="w-6 h-6 bg-gray-200 rounded" />;
+        return '/images/sources/default.png';
     }
   };
 
   return (
     <div className="flex items-center gap-2">
-      {getSourceSvg()}
-      <span className="text-sm font-medium">{source}</span>
+      <img 
+        src={getSourceImageUrl()} 
+        alt={`${source} logo`}
+        className="w-6 h-6 object-contain"
+      />
+      <span className="text-sm font-medium capitalize">{source}</span>
     </div>
   );
 };
